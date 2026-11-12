@@ -4,9 +4,9 @@
 Fair-use by design, following https://www.llresearch.org/copyright :
   * transcripts are never published: they are only kept in a private, git-ignored
     local cache (.cache/) so that rebuilds do not load llresearch.org again;
-  * only short excerpts are kept (one paragraph, trimmed to MAX_CHARS), plus the
-    question it answers (trimmed to MAX_Q_CHARS);
-  * at most MAX_PER_SESSION excerpts are kept per session;
+  * only excerpts are kept: a paragraph with the one before and after it (MAX_TOTAL
+    characters), plus the question it answers (trimmed to MAX_Q_CHARS);
+  * at most MAX_PER_SESSION excerpts and MAX_SHARE of the text are kept per session;
   * every excerpt carries credit and a deep link to the full session.
 
 Usage: python3 build.py 1986 [1987 ...]     -> writes site/data.json
@@ -27,12 +27,15 @@ from pathlib import Path
 BASE = "https://www.llresearch.org"
 UA = "quo-index/0.1 (personal study index; excerpts only; github.com/meneerkrabs)"
 DELAY = 1.5            # seconds between requests
-MAX_CHARS = 900        # an excerpt is one paragraph, trimmed to this length
-MAX_PER_SESSION = 4    # never reproduce more than this many excerpts of a session
+MAX_CHARS = 1500       # the core paragraph of an excerpt is trimmed to this length
+MAX_TOTAL = 2400       # core plus the paragraph before and after it, for context
+MAX_PER_SESSION = 3    # never reproduce more than this many excerpts of a session
+MAX_SHARE = 0.2        # nor more than this share of what the sources say in a session
+MAX_THEMES = 3         # themes kept per excerpt, most relevant first
 MIN_CHARS = 200
 MAX_CANDIDATES = 8     # paragraphs per session offered to the LLM judge
 MIN_QUALITY = 3        # judged excerpts below this (1-5) are dropped
-MAX_Q_CHARS = 400      # the question an excerpt answers is shortened to this
+MAX_Q_CHARS = 700      # the question an excerpt answers is shortened to this
 
 KEYWORDS = json.loads((Path(__file__).parent / "keywords.json").read_text())
 SUBS = {k["id"]: k["subs"] for k in KEYWORDS if k.get("subs")}
@@ -165,14 +168,14 @@ def candidates(turns):
         src = source(speaker)
         if not src:
             continue
-        for p in paras:
+        for j, p in enumerate(paras):
             if len(p) < MIN_CHARS:
                 continue
             for kw in KEYWORDS:
                 hits = len(re.findall(kw["pattern"], p, re.I))
                 # a passing mention is not enough: broad words need more hits
                 if hits >= kw.get("min", 2):
-                    c = found.setdefault(p, {"p": p, "a": anchor, "by": src, "i": i, "kws": {}})
+                    c = found.setdefault(p, {"p": p, "a": anchor, "by": src, "i": i, "j": j, "kws": {}})
                     # density favours paragraphs that are really about the keyword
                     c["kws"][kw["id"]] = hits / (len(p) / 500 + 1)
     return sorted(found.values(), key=lambda c: -max(c["kws"].values()))[:MAX_CANDIDATES]
@@ -187,7 +190,7 @@ def excerpts_for(path, turns, synopsis=""):
         # the themes it found them to be about.
         for c in judged:
             j = JUDGMENTS[key_of(c["p"])]
-            c["q"], c["themes"] = j["q"], [t for t in j["themes"] if t in KW_IDS]
+            c["q"], c["themes"] = j["q"], [t for t in j["themes"] if t in KW_IDS][:MAX_THEMES]
         keep = sorted((c for c in judged if c["q"] >= MIN_QUALITY and c["themes"]),
                       key=lambda c: (-c["q"], -max(c["kws"].values())))
         chosen = [(c, c["themes"]) for c in keep[:MAX_PER_SESSION]]
@@ -203,10 +206,25 @@ def excerpts_for(path, turns, synopsis=""):
         chosen = list(picked.values())
     out = []
     slug = path.replace("/channeling/", "").replace("/", "-")
+    cores = {c["p"] for c, _ in chosen}
+    # what may be quoted from this session in total
+    budget = max(MAX_CHARS, MAX_SHARE * sum(len(p) for s, _, ps in turns if source(s) for p in ps))
     for c, kws in chosen:
-        p, anchor, i = c["p"], c["a"], c["i"]
+        p, anchor, i, paras = c["p"], c["a"], c["i"], turns[c["i"]][2]
+        core = trim(p)
+        if out and len(core) > budget:
+            break
+        budget -= len(core)
         e = {"id": f"{slug}-{anchor.strip('!')}-{key_of(p)[:6]}", "kws": [], "s": path, "a": anchor,
-             "t": trim(p), "by": c["by"], **question_for(i, turns, synopsis)}
+             "t": core, "by": c["by"], **question_for(i, turns, synopsis)}
+        # the paragraph before and after it in the same answer, so it reads in context
+        room = min(MAX_TOTAL - len(core), budget)
+        for key, k in (("pre", c["j"] - 1), ("post", c["j"] + 1)):
+            if 0 <= k < len(paras) and paras[k] not in cores and len(paras[k]) <= room and core == p:
+                e[key] = paras[k]
+                room -= len(paras[k])
+                budget -= len(paras[k])
+                cores.add(paras[k])
         # numbered Q&A (Ra Contact): link to "13.2" instead of the speaker turn
         num = NUMS.get(anchor) or (i and NUMS.get(turns[i - 1][1]))
         if num:

@@ -55,6 +55,7 @@
             padding: 1.1rem 1.4rem; margin: 0 0 1.25rem; }
   article p { margin: 0 0 .75rem; }
   article .q { color: var(--muted); font-size: .95em; }
+  article .near { color: var(--muted); }
   article .q.none { font: italic .8rem system-ui, sans-serif; }
   mark { background: var(--mark); color: inherit; padding: 0 .1em; border-radius: 2px; }
   .src { font: .82rem/1.5 system-ui, sans-serif; color: var(--muted); margin: 0; }
@@ -111,7 +112,7 @@
   <p>All excerpts © L/L Research (Louisville, KY), quoted briefly for study with a link to the
   complete transcript on <a href="https://www.llresearch.org">www.llresearch.org</a>, where the
   full material is free to read. This is an unofficial index, not affiliated with or endorsed by
-  L/L Research. Excerpts longer than one paragraph are shortened and marked […].</p>
+  L/L Research. The lighter paragraphs are the ones just before and after the excerpt in the same answer; long paragraphs are shortened and marked […].</p>
 </footer>
 <button id="helper-btn" hidden aria-label="Ask the noble helper" title="Ask the noble helper"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 58 L18 22 Q32 2 46 22 L50 58 Z" fill="#c9962e"/><path d="M17 30h30M16 38h32M15 46h34M14 54h36" stroke="#1f4e79" stroke-width="3"/><ellipse cx="32" cy="31" rx="11" ry="13" fill="#b9793f"/><path d="M25 29q3-2 6 0M34 29q3-2 6 0" stroke="#1b1b1b" stroke-width="1.6" fill="none"/><path d="M24.5 30.5h8M33.5 30.5h8" stroke="#1b1b1b" stroke-width="1"/><path d="M28 38q4 2.5 8 0" stroke="#5a2d12" stroke-width="1.4" fill="none"/><rect x="29.5" y="43" width="5" height="9" rx="2" fill="#1f4e79"/><circle cx="32" cy="14" r="2.6" fill="#b3261e"/></svg></button>
 <aside id="helper" hidden aria-label="The noble helper">
@@ -160,7 +161,8 @@ function card(g, term) {
   const tags = g.kws.map(k => `<a href="#/k/${k}">${esc(labels[k] || k)}</a>`).join('');
   const qn = g.q ? `<p class="q"><b>${esc(g.qb)}:</b> ${esc(g.q)}</p>`
     : `<p class="q none">No question recorded: from a message the source gave unprompted.</p>`;
-  return `<article data-id="${g.id}">${qn}<p><b>${esc(g.by)}:</b> ${t}</p>
+  const side = s => s ? `<p class="near">${esc(s)}</p>` : '';
+  return `<article data-id="${g.id}">${qn}${side(g.pre)}<p><b>${esc(g.by)}:</b> ${t}</p>${side(g.post)}
     <p class="src">${esc(g.by)}${g.n ? ' ' + g.n : ''}, <a href="${BASE}${g.s}#${g.a}">${esc(sessionName(s))}</a> ·
     ©${s.date.slice(0, 4)} by L/L Research (Louisville, KY) · <a href="${BASE}${g.s}">read the full session</a> ·
     <a href="#/s/${slug(g.s)}">excerpts of this session</a> · <a href="#/e/${g.id}">permalink</a><span class="ask"> ·

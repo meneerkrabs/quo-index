@@ -4,7 +4,7 @@ An unofficial keyword index of short excerpts from the Ra, Q’uo, Latwii, Haton
 published by [L/L Research](https://www.llresearch.org). Every excerpt links to the
 exact place in the full session on llresearch.org.
 
-Live at <https://ll.dtun.nl> (with the helper) and <https://meneerkrabs.github.io/quo-index/>.
+Live at <https://ll.dtun.nl> (with the helper) and <https://meneerkrabs.github.io/love-light-index/>.
 
 ## Credits and copyright
 
@@ -17,9 +17,10 @@ which allows sharing excerpts with attribution and a link to the source:
 
 - no full transcripts are published or committed; the build keeps a private local cache
   only, so that rebuilding does not load llresearch.org again;
-- an excerpt is a single paragraph, shortened to 900 characters and marked `[…]`;
-- where there is one, the question it answers is shown above it, shortened to 400 characters;
-- at most four paragraphs are quoted from any one session;
+- an excerpt is one paragraph with the paragraph before and after it for context
+  (2,400 characters at most; longer paragraphs are shortened and marked `[…]`);
+- where there is one, the question it answers is shown above it, shortened to 700 characters;
+- at most three excerpts, and at most a fifth of what the sources say, are quoted from any one session;
 - each excerpt shows the source, date, copyright line and a link to the full session.
 
 If L/L Research would like anything changed or removed, please open an issue.
@@ -34,7 +35,7 @@ If L/L Research would like anything changed or removed, please open an issue.
 
 Candidates are found by word match (see `min` in `keywords.json`): the eight most
 keyword-dense paragraphs of a session. An LLM then reads those paragraphs and decides which
-themes each is really about and how well it stands alone; the best four are kept.
+themes each is really about and how well it stands alone; the best three are kept, under their three most relevant themes.
 `python3 build.py cache` rebuilds everything from the local cache.
 
 - `judge.py` lets an LLM read the candidate paragraphs (never whole transcripts) and say
