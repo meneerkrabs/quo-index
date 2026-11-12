@@ -397,7 +397,10 @@ $('helper-form').addEventListener('submit', async e => {
       body: JSON.stringify({question, ids, history})});
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'no answer');
-    wait.innerHTML = esc(j.answer.replace(/【(\d+)】/g, '[$1]')).replace(/\n/g, '<br>')
+    // the model is asked for plain text, but drop any markdown emphasis it adds anyway
+    const plain = j.answer.replace(/\*\*(.+?)\*\*/g, '$1').replace(/__(.+?)__/g, '$1')
+      .replace(/`([^`]+)`/g, '$1').replace(/^#+\s*/gm, '');
+    wait.innerHTML = esc(plain.replace(/【(\d+)】/g, '[$1]')).replace(/\n/g, '<br>')
       .replace(/\[(\d+)\]/g, (m, n) => j.sources[n - 1] ? `<a href="#/e/${j.sources[n - 1]}">[${n}]</a>` : m);
     history.push({role: 'reader', text: question}, {role: 'helper', text: j.answer});
   } catch (err) { wait.innerHTML = 'The helper could not answer just now (' + esc(String(err.message)) + ').'; }
