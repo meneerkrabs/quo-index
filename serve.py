@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Local server for the site plus "the noble helper", an LLM guide to the excerpts.
+"""Local server for the site plus "the noble helper", an LLM guide to the channelings.
 
-LOCAL, PERSONAL USE ONLY. The helper reads L/L Research excerpts in order to explain
-them. L/L Research's copyright policy requires their written permission for any
-public tool that retrieves their content, so this is not deployed with the public
-site; the site only shows the helper when this server answers at /api/guide.
+This one is for working on the site locally (it needs the `opencode` CLI); the helper
+in production is server/helper.mjs behind ll.dtun.nl. The site shows the helper only
+when a server answers at /api/guide.
 
-Usage: python3 serve.py [port]      (needs the `opencode` CLI)
+Usage: python3 serve.py [port]
 """
 import json
 import re
@@ -20,6 +19,7 @@ ROOT = Path(__file__).parent / "site"
 MODEL = "opencode-go/deepseek-v4.1-flash"
 MAX_EXCERPTS = 6
 MAX_SESSION = 40000     # characters of the session given as context
+_CACHE = {}
 STOP = set("""the and for that this with what does about are how why from have has was were which when
 who whom you your can could would should there their them they will into than then been being not but
 een het de van en is wat hoe waarom over met voor dat die zijn niet maar ook kan wil mij mijn naar
@@ -61,8 +61,19 @@ READER'S QUESTION
 
 
 def load():
-    d = json.loads((ROOT / "data.json").read_text())
-    return d, {e["id"]: e for e in d["excerpts"]}
+    """The site's two files, reloaded when a rebuild changes corpus.json."""
+    stamp = (ROOT / "corpus.json").stat().st_mtime
+    if _CACHE.get("stamp") != stamp:
+        index = json.loads((ROOT / "index.json").read_text())
+        excerpts = json.loads((ROOT / "corpus.json").read_text())["excerpts"]
+        _CACHE.update(stamp=stamp, data={"sessions": index["sessions"], "excerpts": excerpts},
+                      by_id={e["id"]: e for e in excerpts})
+    return _CACHE["data"], _CACHE["by_id"]
+
+
+def session_text(data, path):
+    """A whole session from the local corpus: every piece, in order, with who spoke."""
+    return "\n\n".join(f"{e['by']}:\n{e['t']}" for e in data["excerpts"] if e["s"] == path)
 
 
 def find(question, ids, by_id, data):
@@ -94,16 +105,11 @@ def ask(question, ids, history):
         asked = f"\n(asked by {e['qb']}: {e['q']})" if e.get("q") else ""
         role = " — THE EXCERPT THE READER IS LOOKING AT" if n <= focus else " — background" if focus else ""
         blocks.append(f"[{n}]{role}\n{e['by']}, {s['title']} ({s['date']}){asked}\n{e['t']}")
-    if focus:   # the full session of the excerpt in view, from the local cache
-        try:
-            import build
-            _, _, _, turns = build.parse(build.get(picked[0]["s"], cache=True))
-            full = "\n\n".join(f"{who}:\n" + "\n".join(paras) for who, _, paras in turns)
-            at = max(0, full.find(picked[0]["t"][:60]))
-            start = max(0, min(at - MAX_SESSION // 2, len(full) - MAX_SESSION))
-            blocks.append("--- The full session of excerpt [1], for context ---\n" + full[start:start + MAX_SESSION])
-        except Exception as e:
-            print("no session context:", e, flush=True)
+    if focus:   # the full session of the piece in view, from the local corpus
+        full = session_text(data, picked[0]["s"])
+        at = max(0, full.find(picked[0]["t"][:60]))
+        start = max(0, min(at - MAX_SESSION // 2, len(full) - MAX_SESSION))
+        blocks.append("--- The full session of excerpt [1], for context ---\n" + full[start:start + MAX_SESSION])
     past = "\n".join(f"{h['role']}: {h['text'][:600]}" for h in history[-4:]) or "(nothing yet)"
     prompt = PROMPT % ("\n\n".join(blocks), past, question[:1000])
     with tempfile.TemporaryDirectory() as empty:

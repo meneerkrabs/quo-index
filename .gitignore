@@ -1,4 +1,5 @@
 build.log
+build-full.log
 __pycache__/
 .DS_Store
 .cache/

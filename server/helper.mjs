@@ -3,13 +3,15 @@
 //   GET  /api/guide  -> {ok: true}
 //   POST /api/guide  {question, ids, history} -> {answer, sources}
 //
-// The model gets excerpts that are on the site and, for the excerpt the reader is looking
-// at, its full session as context (read from llresearch.org, kept in memory only). Modelled on the "astroloog" service of forecast.dtun.nl and reads the
+// The model gets pieces that are on the site and, for the piece the reader is looking
+// at, its full session as context (from the site's own corpus.json — nothing is fetched
+// from llresearch.org). Modelled on the "astroloog" service of forecast.dtun.nl and reads the
 // same provider keys (OpenAI-compatible APIs, free tiers first):
 //   GROQ_API_KEY, GROQ_MODELS                       Groq, tried first
 //   LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_FALLBACK_MODELS, LLM_EXTRA   Z.ai
 // Own settings (HELPER_ prefix, so a shared env file cannot override them):
-//   HELPER_PORT (8791), HELPER_ORIGIN (https://ll.dtun.nl), HELPER_DATA (data.json),
+//   HELPER_PORT (8791), HELPER_ORIGIN (https://ll.dtun.nl),
+//   HELPER_DATA (/var/www/html/ll, the site directory with index.json and corpus.json),
 //   HELPER_PER_MIN (10), HELPER_PER_DAY (300), HELPER_CLIENT_PER_HOUR (20)
 import http from 'node:http';
 import { readFileSync, statSync } from 'node:fs';
@@ -17,12 +19,11 @@ import { readFileSync, statSync } from 'node:fs';
 const env = process.env;
 const PORT = Number(env.HELPER_PORT || 8791);
 const ORIGIN = env.HELPER_ORIGIN || 'https://ll.dtun.nl';
-const DATA = env.HELPER_DATA || '/var/www/html/ll/data.json';
+const DATA = env.HELPER_DATA || '/var/www/html/ll';
 const PER_MIN = Number(env.HELPER_PER_MIN || 10);
 const PER_DAY = Number(env.HELPER_PER_DAY || 300);
 const CLIENT_PER_HOUR = Number(env.HELPER_CLIENT_PER_HOUR || 20);
 const MAX_EXCERPTS = 6;
-const SOURCE = 'https://www.llresearch.org';
 const MAX_SESSION_CHARS = Number(env.HELPER_SESSION_CHARS || 40000);
 
 const list = (v) => String(v || '').split(',').map((m) => m.trim()).filter(Boolean);
@@ -65,12 +66,13 @@ who whom you your can could would should there their them they will into than th
 een het de van en is wat hoe waarom over met voor dat die zijn niet maar ook kan wil mij mijn naar
 excerpt excerpts mean means meaning explain passage fragment betekent bedoelt uitleg uitleggen hier here says said tell`.split(/\s+/));
 
-// data.json is reloaded when the site is redeployed
+// index.json and corpus.json are reloaded when the site is redeployed
 let data = null, byId = null, stamp = 0;
 function load() {
-  const m = statSync(DATA).mtimeMs;
+  const m = statSync(`${DATA}/corpus.json`).mtimeMs;
   if (m !== stamp) {
-    data = JSON.parse(readFileSync(DATA, 'utf8'));
+    const index = JSON.parse(readFileSync(`${DATA}/index.json`, 'utf8'));
+    data = { sessions: index.sessions, excerpts: JSON.parse(readFileSync(`${DATA}/corpus.json`, 'utf8')).excerpts };
     byId = new Map(data.excerpts.map((e) => [e.id, e]));
     stamp = m;
   }
@@ -98,35 +100,16 @@ function find(question, ids) {
   return { picked, focus: focus.length };
 }
 
-// The full session of the excerpt the reader is looking at, as context for the model. It is
-// read from llresearch.org when asked for and kept in memory for a few hours only; nothing
-// is stored on disk and the reader never gets it, only the helper's explanation.
-const sessions = new Map();
-const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”', mdash: '—', ndash: '–', hellip: '…' };
-const plain = (s) => s.replace(/<sup\b[\s\S]*?<\/sup>/g, '').replace(/<[^>]+>/g, '')
-  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
-  .replace(/&(\w+);/g, (m0, n) => entities[n] ?? m0).replace(/[ \t]+/g, ' ');
-async function sessionText(path) {
-  if (!/^\/channeling\/[\w-]+\/[\w-]+$/.test(path)) return '';
-  const hit = sessions.get(path);
-  if (hit && Date.now() - hit.at < 6 * 3_600_000) return hit.text;
-  try {
-    const r = await fetch(SOURCE + path, { signal: AbortSignal.timeout(15_000),
-      headers: { 'user-agent': 'quo-index helper (ll.dtun.nl; one page per question, cached)' } });
-    if (!r.ok) return '';
-    const article = (await r.text()).match(/<article id="fountain">([\s\S]*?)<\/article>/);
-    if (!article) return '';
-    const text = plain(article[1].replace(/<h4 class="speaker"[\s\S]*?<span class="name"[^>]*>([\s\S]*?)<\/span><\/h4>/g, '\n\n$1:\n')
-      .replace(/<\/p>/g, '\n')).replace(/\n{3,}/g, '\n\n').trim();
-    if (sessions.size >= 40) sessions.delete(sessions.keys().next().value);
-    sessions.set(path, { at: Date.now(), text });
-    return text;
-  } catch (e) { console.error('session unreachable', path, e.name); return ''; }
+// The full session of the piece the reader is looking at, as context for the model. It comes
+// from the site's own corpus: nothing is fetched from llresearch.org, and the reader has the
+// whole session on the site itself.
+function sessionText(path) {
+  return data.excerpts.filter((e) => e.s === path).map((e) => `${e.by}:\n${e.t}`).join('\n\n');
 }
-// Long sessions are cut to a window around the excerpt.
+// Long sessions are cut to a window around the piece.
 function windowAround(text, excerpt) {
   if (text.length <= MAX_SESSION_CHARS) return text;
-  const at = Math.max(0, text.indexOf(excerpt.replace(/ \[…\]$/, '').slice(0, 60)));
+  const at = Math.max(0, text.indexOf(excerpt.slice(0, 60)));
   const start = Math.max(0, Math.min(at - MAX_SESSION_CHARS / 2, text.length - MAX_SESSION_CHARS));
   return (start > 0 ? '[…earlier part left out…]\n' : '') + text.slice(start, start + MAX_SESSION_CHARS)
     + (start + MAX_SESSION_CHARS < text.length ? '\n[…later part left out…]' : '');
@@ -197,7 +180,7 @@ async function ask(req, res) {
   }).join('\n\n');
   let session = '';
   if (focus) {
-    const full = await sessionText(picked[0].s);
+    const full = sessionText(picked[0].s);
     if (full) session = `\n\n--- The full session of excerpt [1], for context ---\n${windowAround(full, picked[0].t)}\n--- End of session ---`;
   }
   const answer = await complete([{ role: 'system', content: `${SYSTEM}\n\n--- Excerpts ---\n${blocks}\n--- End of excerpts ---${session}` },
