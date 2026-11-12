@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confederation sources by keyword</title>
+<style>
+  :root {
+    --bg: #f6f2ea; --ink: #23201b; --muted: #746c5f; --line: #ddd4c4;
+    --card: #fffdf8; --accent: #7a4b1e; --mark: #f3dfae;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #16151a; --ink: #e9e4d9; --muted: #9a9385; --line: #33313a;
+            --card: #1e1d24; --accent: #e0b070; --mark: #5a4520; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 18px/1.65 Georgia, "Iowan Old Style", "Times New Roman", serif; }
+  a { color: var(--accent); }
+  header, main, footer { max-width: 46rem; margin: 0 auto; padding: 0 1.25rem; }
+  header { padding-top: 2.5rem; }
+  h1 { font-size: 2rem; font-weight: normal; margin: 0; letter-spacing: .01em; }
+  h1 a { color: inherit; text-decoration: none; }
+  .sub { color: var(--muted); margin: .25rem 0 1.5rem; font-style: italic; }
+  .bar { display: flex; gap: .6rem; }
+  select, button { font: .95rem system-ui, sans-serif; color: var(--ink); background: var(--card);
+         border: 1px solid var(--line); border-radius: 6px; padding: .6rem .8rem; cursor: pointer; }
+  input[type=search] { flex: 1; min-width: 0; padding: .7rem .9rem; font: inherit; color: var(--ink);
+         background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
+  h2 { font-weight: normal; font-size: 1.5rem; margin: 2rem 0 .25rem; }
+  .count { color: var(--muted); font-size: .9rem; margin: 0 0 1.5rem;
+           font-family: system-ui, sans-serif; }
+  .kws { list-style: none; padding: 0; margin: 2rem 0; columns: 3 11rem; column-gap: 2rem; }
+  .kws li { break-inside: avoid; padding: .2rem 0; display: flex; justify-content: space-between;
+            border-bottom: 1px dotted var(--line); }
+  .kws a { text-decoration: none; }
+  .kws a:hover { text-decoration: underline; }
+  .kws span { color: var(--muted); font: .8rem system-ui, sans-serif; align-self: center; }
+  article { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+            padding: 1.1rem 1.4rem; margin: 0 0 1.25rem; }
+  article p { margin: 0 0 .75rem; }
+  mark { background: var(--mark); color: inherit; padding: 0 .1em; border-radius: 2px; }
+  .src { font: .82rem/1.5 system-ui, sans-serif; color: var(--muted); margin: 0; }
+  .tags a { margin-right: .6rem; }
+  .back { font: .9rem system-ui, sans-serif; display: inline-block; margin-top: 1.5rem; }
+  footer { margin-top: 3rem; padding-bottom: 3rem; border-top: 1px solid var(--line);
+           font: .85rem/1.6 system-ui, sans-serif; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="#/">Confederation sources by keyword</a></h1>
+  <p class="sub">Short excerpts from the Q’uo, Latwii, Hatonn, Laitos, Oxal, L/Leema and Yadda channelings of L/L Research, each linked to its full session.</p>
+  <div class="bar">
+    <input type="search" id="q" placeholder="Search the excerpts…" aria-label="Search the excerpts">
+    <select id="src" aria-label="Source"></select>
+  </div>
+</header>
+<main id="main"></main>
+<footer>
+  <p>All excerpts © L/L Research (Louisville, KY), quoted briefly for study with a link to the
+  complete transcript on <a href="https://www.llresearch.org">www.llresearch.org</a>, where the
+  full material is free to read. This is an unofficial index, not affiliated with or endorsed by
+  L/L Research. Excerpts longer than one paragraph are shortened and marked […].</p>
+</footer>
+<script>
+const BASE = 'https://www.llresearch.org';
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const main = document.getElementById('main'), q = document.getElementById('q'), src = document.getElementById('src');
+let D, all = [], shown = 100;   // all: the excerpts in date order
+
+function prepare() {
+  all = D.excerpts.slice().sort((a, b) => a.s.localeCompare(b.s) || a.a.localeCompare(b.a, undefined, {numeric: true}));
+}
+const label = id => D.keywords.find(k => k.id === id).label;
+
+function card(g, term) {
+  const s = D.sessions[g.s], year = s.date.slice(0, 4);
+  let t = esc(g.t);
+  if (term) t = t.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
+  const tags = g.kws.map(k => `<a href="#/k/${k}">${esc(label(k))}</a>`).join('');
+  return `<article><p>${t}</p>
+    <p class="src">${esc(g.by)}, <a href="${BASE}${g.s}#${g.a}">${esc(s.title)}</a> · ${esc(s.kind)} ·
+    ©${year} by L/L Research (Louisville, KY) · <a href="${BASE}${g.s}">read the full session</a></p>
+    <p class="src tags">${tags}</p></article>`;
+}
+
+function page(hits, term) {
+  return hits.slice(0, shown).map(g => card(g, term)).join('') +
+    (hits.length > shown ? `<p><button id="more">Show more (${hits.length - shown} left)</button></p>` : '');
+}
+
+function render() {
+  const by = src.value, groups = by ? all.filter(g => g.by === by) : all;
+  const term = q.value.trim(), m = location.hash.match(/^#\/k\/([\w-]+)/);
+  let h = '';
+  if (term.length > 1) {
+    const hits = groups.filter(g => g.t.toLowerCase().includes(term.toLowerCase()));
+    h = `<h2>“${esc(term)}”</h2><p class="count">${hits.length} excerpts</p>` + page(hits, term);
+  } else if (m && D.keywords.some(k => k.id === m[1])) {
+    const hits = groups.filter(g => g.kws.includes(m[1]));
+    h = `<h2>${esc(label(m[1]))}</h2><p class="count">${hits.length} excerpts, oldest first</p>` +
+        page(hits) + `<a class="back" href="#/">← All keywords</a>`;
+  } else {
+    const n = Object.keys(D.sessions).length, years = Object.values(D.sessions).map(s => s.date.slice(0, 4)).sort();
+    h = `<p class="count">${groups.length} excerpts from ${n} sessions, ${years[0] === years[years.length - 1] ? years[0] : years[0] + '–' + years[years.length - 1]}</p><ul class="kws">` +
+      D.keywords.map(k => [k, groups.filter(g => g.kws.includes(k.id)).length]).filter(x => x[1])
+        .map(([k, c]) => `<li><a href="#/k/${k.id}">${esc(k.label)}</a><span>${c}</span></li>`).join('') + '</ul>';
+  }
+  main.innerHTML = h;
+}
+
+fetch('data.json').then(r => r.json()).then(d => {
+  D = d; prepare();
+  const n = {}; all.forEach(g => n[g.by] = (n[g.by] || 0) + 1);
+  src.innerHTML = '<option value="">All sources</option>' + Object.keys(n).sort((a, b) => n[b] - n[a])
+    .map(s => `<option value="${esc(s)}">${esc(s)} (${n[s]})</option>`).join('');
+  render();
+});
+addEventListener('hashchange', () => { q.value = ''; shown = 100; render(); scrollTo(0, 0); });
+q.addEventListener('input', () => { shown = 100; render(); });
+src.addEventListener('change', () => { shown = 100; render(); });
+main.addEventListener('click', e => { if (e.target.id === 'more') { shown += 100; render(); } });
+</script>
+</body>
+</html>
