@@ -32,9 +32,10 @@ If L/L Research would like anything changed or removed, please open an issue.
 - `site/index.html` is a static page: excerpts per keyword and subcategory, search, filters
   on source and years, a list of sessions, a random excerpt and a permanent link per excerpt.
 
-Excerpts are chosen by word match. A keyword must occur at least twice in a paragraph
-(once for specific terms, three times for very broad ones such as "love"); see `min` in
-`keywords.json`. `python3 build.py cache` rebuilds everything from the local cache.
+Candidates are found by word match (see `min` in `keywords.json`): the eight most
+keyword-dense paragraphs of a session. An LLM then reads those paragraphs and decides which
+themes each is really about and how well it stands alone; the best four are kept.
+`python3 build.py cache` rebuilds everything from the local cache.
 
 - `judge.py` lets an LLM read the candidate paragraphs (never whole transcripts) and say
   which themes each is about and how well it stands alone; `judgments.json` holds the verdicts.
