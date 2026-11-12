@@ -39,6 +39,7 @@
   article { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
             padding: 1.1rem 1.4rem; margin: 0 0 1.25rem; }
   article p { margin: 0 0 .75rem; }
+  article .q { color: var(--muted); font-size: .95em; }
   mark { background: var(--mark); color: inherit; padding: 0 .1em; border-radius: 2px; }
   .src { font: .82rem/1.5 system-ui, sans-serif; color: var(--muted); margin: 0; }
   .tags a { margin-right: .6rem; }
@@ -79,7 +80,8 @@ function card(g, term) {
   let t = esc(g.t);
   if (term) t = t.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
   const tags = g.kws.map(k => `<a href="#/k/${k}">${esc(label(k))}</a>`).join('');
-  return `<article><p>${t}</p>
+  const qn = g.q ? `<p class="q"><b>${esc(g.qb)}:</b> ${esc(g.q)}</p>` : '';
+  return `<article>${qn}<p><b>${esc(g.by)}:</b> ${t}</p>
     <p class="src">${esc(g.by)}, <a href="${BASE}${g.s}#${g.a}">${esc(s.title)}</a> · ${esc(s.kind)} ·
     ©${year} by L/L Research (Louisville, KY) · <a href="${BASE}${g.s}">read the full session</a></p>
     <p class="src tags">${tags}</p></article>`;

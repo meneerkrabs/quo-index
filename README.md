@@ -13,8 +13,10 @@ This project is not affiliated with or endorsed by L/L Research.
 It is built to stay within their [copyright policy](https://www.llresearch.org/copyright),
 which allows sharing excerpts with attribution and a link to the source:
 
-- no full transcripts are stored or published, here or in the build;
+- no full transcripts are published or committed; the build keeps a private local cache
+  only, so that rebuilding does not load llresearch.org again;
 - an excerpt is a single paragraph, shortened to 900 characters and marked `[…]`;
+- where there is one, the question it answers is shown above it, shortened to 400 characters;
 - at most four paragraphs are quoted from any one session;
 - each excerpt shows the source, date, copyright line and a link to the full session.
 

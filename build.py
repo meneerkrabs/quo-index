@@ -2,14 +2,17 @@
 """Build a keyword index of short excerpts from Q'uo, Latwii, Hatonn, Laitos, Oxal, L/Leema and Yadda that link back to llresearch.org.
 
 Fair-use by design, following https://www.llresearch.org/copyright :
-  * transcripts are read in memory only and never written to disk;
-  * only short excerpts are kept (one paragraph, trimmed to MAX_CHARS);
+  * transcripts are never published: they are only kept in a private, git-ignored
+    local cache (.cache/) so that rebuilds do not load llresearch.org again;
+  * only short excerpts are kept (one paragraph, trimmed to MAX_CHARS), plus the
+    question it answers (trimmed to MAX_Q_CHARS);
   * at most MAX_PER_SESSION excerpts are kept per session;
   * every excerpt carries credit and a deep link to the full session.
 
 Usage: python3 build.py 1986 [1987 ...]     -> writes site/data.json
        python3 build.py /channeling/1990/1021  -> (re)reads single sessions
 """
+import gzip
 import html
 import json
 import re
@@ -24,16 +27,26 @@ DELAY = 1.5            # seconds between requests
 MAX_CHARS = 900        # an excerpt is one paragraph, trimmed to this length
 MAX_PER_SESSION = 4    # never reproduce more than this many excerpts of a session
 MIN_CHARS = 200
+MAX_Q_CHARS = 400      # the question an excerpt answers is shortened to this
 
 KEYWORDS = json.loads((Path(__file__).parent / "keywords.json").read_text())
 OUT = Path(__file__).parent / "site" / "data.json"
+CACHE = Path(__file__).parent / ".cache"   # private, git-ignored
 
 
-def get(path):
+def get(path, cache=False):
+    """Fetch a page. Session pages are kept in a private local cache (never
+    committed or published) so that rebuilds do not hit llresearch.org again."""
+    f = CACHE / (path.strip("/").replace("/", "_") + ".html.gz")
+    if cache and f.exists():
+        return gzip.decompress(f.read_bytes()).decode("utf-8")
     req = urllib.request.Request(BASE + path, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=30) as r:
         body = r.read().decode("utf-8", "replace")
     time.sleep(DELAY)
+    if cache:
+        CACHE.mkdir(exist_ok=True)
+        f.write_bytes(gzip.compress(body.encode("utf-8")))
     return body
 
 
@@ -60,13 +73,15 @@ def text_of(fragment):
 
 
 def parse(body):
-    """Return (title, kind, [(speaker, anchor, [paragraphs])])."""
+    """Return (title, kind, synopsis, [(speaker, anchor, [paragraphs])])."""
     m = re.search(r"<title>(.*?) - L/L Research</title>", body)
     full = html.unescape(m.group(1)) if m else ""
     title, _, kind = full.partition(" - ")
     m = re.search(r'<article id="fountain">(.*?)</article>', body, re.S)
     if not m:
-        return title, kind, []
+        return title, kind, "", []
+    syn = re.search(r'<p class="hint-content">(.*?)</p>', m.group(1), re.S)
+    synopsis = text_of(syn.group(1)) if syn else ""
     parts = re.split(
         r'<h4 class="speaker"[^>]*><span class="name" id="(![^"]+)">(.*?)</span></h4>',
         m.group(1))
@@ -75,13 +90,13 @@ def parse(body):
         anchor, speaker, chunk = parts[i], text_of(parts[i + 1]), parts[i + 2]
         paras = [text_of(p) for p in re.findall(r"<p\b[^>]*>(.*?)</p>", chunk, re.S)]
         turns.append((speaker, anchor, [p for p in paras if p]))
-    return title, kind, turns
+    return title, kind, synopsis, turns
 
 
-def trim(p):
-    if len(p) <= MAX_CHARS:
+def trim(p, limit=MAX_CHARS):
+    if len(p) <= limit:
         return p
-    cut = p[:MAX_CHARS]
+    cut = p[:limit]
     end = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! "))
     return (cut[: end + 1] if end > MIN_CHARS else cut.rsplit(" ", 1)[0]) + " […]"
 
@@ -95,10 +110,24 @@ def source(speaker):
     return SOURCES.get(speaker.replace("’", "'").strip().lower())
 
 
-def excerpts_for(path, turns):
+def question_for(i, turns, synopsis):
+    """The question a turn answers: the questioner's turn just before it, or, for
+    the opening message, the group question or topic line of the session."""
+    if i and not source(turns[i - 1][0]):
+        who, _, paras = turns[i - 1]
+        q = trim(" ".join(paras), MAX_Q_CHARS)
+        return {"q": q, "qb": who} if q else {}
+    if synopsis and not any(not source(s) for s, _, _ in turns[:i]):
+        if synopsis.startswith("Topics:"):
+            return {"q": trim(synopsis[7:].strip(), MAX_Q_CHARS), "qb": "Topics"}
+        return {"q": trim(synopsis, MAX_Q_CHARS), "qb": "Group question"}
+    return {}
+
+
+def excerpts_for(path, turns, synopsis=""):
     """Pick the best paragraph per keyword, capped per session."""
     cands = []
-    for speaker, anchor, paras in turns:
+    for i, (speaker, anchor, paras) in enumerate(turns):
         src = source(speaker)
         if not src:
             continue
@@ -109,16 +138,19 @@ def excerpts_for(path, turns):
                 hits = len(re.findall(kw["pattern"], p, re.I))
                 if hits:
                     # density favours paragraphs that are really about the keyword
-                    cands.append((hits / (len(p) / 500 + 1), kw["id"], anchor, p, src))
+                    cands.append((hits / (len(p) / 500 + 1), kw["id"], anchor, p, src, i))
     cands.sort(key=lambda c: -c[0])
     used_kw, picked = set(), {}   # picked: paragraph -> excerpt
-    for score, kw, anchor, p, src in cands:
+    for score, kw, anchor, p, src, i in cands:
         if kw in used_kw:
             continue
         if p not in picked and len(picked) >= MAX_PER_SESSION:
             continue
         used_kw.add(kw)
-        picked.setdefault(p, {"kws": [], "s": path, "a": anchor, "t": trim(p), "by": src})["kws"].append(kw)
+        if p not in picked:
+            picked[p] = {"kws": [], "s": path, "a": anchor, "t": trim(p), "by": src,
+                         **question_for(i, turns, synopsis)}
+        picked[p]["kws"].append(kw)
     return list(picked.values())
 
 
@@ -137,7 +169,7 @@ def main(years):
 def process(data, paths):
     for path in paths:
         try:
-            title, kind, turns = parse(get(path))
+            title, kind, synopsis, turns = parse(get(path, cache=True))
         except Exception as e:
             print(f"  {path}: FAILED {e}", flush=True)
             continue
@@ -145,7 +177,7 @@ def process(data, paths):
         if not any(source(s) for s, _, _ in turns):
             data["sessions"].pop(path, None)
             continue
-        ex = excerpts_for(path, turns)
+        ex = excerpts_for(path, turns, synopsis)
         y, md = path.split("/")[2:4]
         data["sessions"][path] = {"title": title, "kind": kind, "date": f"{y}-{md[:2]}-{md[2:4]}"}
         data["excerpts"] += ex
