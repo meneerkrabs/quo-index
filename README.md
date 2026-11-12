@@ -37,8 +37,13 @@ If L/L Research would like anything changed or removed, please open an issue.
 A piece is one speaker turn (questioner turns included), and only a turn longer than 3,000
 characters is split, at a paragraph or sentence end, never inside the text. Pieces are filed
 under up to three themes, taken from an LLM's reading of the session (`judge.py`) or, where
-it has no verdict, from the patterns in `keywords.json`. `python3 build.py cache` rebuilds
-everything from the private local page cache without touching llresearch.org.
+it has no verdict, from the patterns in `keywords.json`. Each theme carries a strength: the
+judge's verdict averaged over the piece's paragraphs, plus how densely the keyword's own
+patterns appear, so a long passage that mentions a theme in passing does not outrank a short
+one that is entirely about it. Theme pages and search open strongest first (search: most
+matches first), and the order menu switches to oldest or newest first.
+`python3 build.py cache` rebuilds everything from the private local page cache without
+touching llresearch.org.
 
 - `judge.py` lets an LLM read candidate paragraphs and say which themes each is about and
   how well it stands alone; `judgments.json` holds the verdicts.

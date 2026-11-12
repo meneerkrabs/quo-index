@@ -110,7 +110,7 @@
     <select id="src" aria-label="Source"></select>
     <select id="y1" aria-label="From year"></select>
     <select id="y2" aria-label="To year"></select>
-    <select id="ord" aria-label="Order"><option value="old">Oldest first</option><option value="new">Newest first</option></select>
+    <select id="ord" aria-label="Order"><option value="strong">Strongest first</option><option value="old">Oldest first</option><option value="new">Newest first</option></select>
   </div>
 </header>
 <main id="main"></main>
@@ -140,6 +140,9 @@ let IDX = null, all = null, shown = 100, labels = {};   // all: every piece, loa
 const slug = s => s.replace('/channeling/', '').replace(/\//g, '-');
 const ses = g => IDX.sessions[g.s];
 const year = g => (ses(g) ? ses(g).date : '').slice(0, 4);
+// how strongly a piece belongs to a theme (build.py), 0 for pieces without a score
+const strength = (g, key) => (g.w && g.w[key]) || 0;
+const ORDER = {strong: 'strongest', old: 'oldest', new: 'newest'};
 const fmt = d => new Date(d + 'T12:00').toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
 const sessionName = s => s.kind ? s.title + ' · ' + s.kind : s.title + ', ' + fmt(s.date);
 
@@ -280,17 +283,25 @@ function render() {
   const back = `<a class="back" href="#/">← All keywords</a>`;
   let m, out = '', tab = 'k';
   if (term.length > 1) {
-    const hits = groups.filter(g => (g.t + ' ' + (g.q || '')).toLowerCase().includes(term.toLowerCase()));
-    out = `<h2>“${esc(term)}”</h2><p class="count">${hits.length} pieces</p>` + page(hits, term);
+    let hits = groups.filter(g => (g.t + ' ' + (g.q || '')).toLowerCase().includes(term.toLowerCase()));
+    // strongest first means the pieces that use the word most; equal counts keep their order
+    if (ord.value === 'strong') {
+      const low = term.toLowerCase(), count = g => (g.t + ' ' + (g.q || '')).toLowerCase().split(low).length - 1;
+      hits = hits.map(g => [count(g), g]).sort((a, b) => b[0] - a[0]).map(h => h[1]);
+    }
+    const how = ord.value === 'strong' ? ', most matches first' : '';
+    out = `<h2>“${esc(term)}”</h2><p class="count">${hits.length} pieces${how}</p>` + page(hits, term);
   } else if ((m = h.match(/^#\/k\/([\w-]+)(?:\/([\w-]+))?/)) && labels[m[1]]) {
     const kw = IDX.keywords.find(k => k.id === m[1]), key = m[2] && labels[m[1] + '/' + m[2]] ? m[1] + '/' + m[2] : m[1];
     const inKw = groups.filter(g => g.kws.includes(m[1])), hits = groups.filter(g => g.kws.includes(key));
+    // strongest first; equal strength keeps the list's own order (oldest first)
+    if (ord.value === 'strong') hits.sort((a, b) => strength(b, key) - strength(a, key));
     const chips = (kw.subs || []).length ? `<div class="chips"><a href="#/k/${kw.id}" class="${key === kw.id ? 'on' : ''}">All (${inKw.length})</a>` +
       kw.subs.map(s => { const id = kw.id + '/' + s.id;
         return `<a href="#/k/${id}" class="${key === id ? 'on' : ''}">${esc(s.label)} (${inKw.filter(g => g.kws.includes(id)).length})</a>`; }).join('') + '</div>' : '';
     const by = {}; hits.forEach(g => by[g.by] = (by[g.by] || 0) + 1);
     const spread = Object.keys(by).length > 1 ? ' · ' + Object.keys(by).sort((a, b) => by[b] - by[a]).map(k => `${esc(k)} ${by[k]}`).join(', ') : '';
-    out = `<h2>${esc(labels[key])}</h2><p class="count">${hits.length} pieces, ${ord.value === 'new' ? 'newest' : 'oldest'} first${spread}</p>${chips}` + page(hits) + back;
+    out = `<h2>${esc(labels[key])}</h2><p class="count">${hits.length} pieces, ${ORDER[ord.value] || 'oldest'} first${spread}</p>${chips}` + page(hits) + back;
   } else if ((m = h.match(/^#\/e\/(.+)/))) {
     const g = all.find(g => g.id === decodeURIComponent(m[1]));
     out = g ? `<h2>Piece</h2><p class="count">Permanent link to this piece</p>` + card(g)

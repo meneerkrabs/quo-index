@@ -226,9 +226,16 @@ def grouped(paras):
     return out
 
 
+def density(pattern, text):
+    """How much of a text is about a pattern: hits weighted down by its length."""
+    return 3 * len(re.findall(pattern, text, re.I)) / (len(text) / 500 + 1)
+
+
 def themes_of(text, paras):
-    """The themes a piece is filed under: what an LLM judge saw in it, topped up with
-    the keyword patterns. Subcategories are added after their keyword."""
+    """The themes a piece is filed under, with how strongly: what an LLM judge saw in it,
+    topped up with the keyword patterns. The score says how much of the piece is about the
+    theme, not how long the piece is, so a long passage that passes a theme in one
+    paragraph does not outrank a short one that is entirely about it."""
     score = {}
     for p in paras:
         j = JUDGMENTS.get(key_of(p))
@@ -236,15 +243,19 @@ def themes_of(text, paras):
             for t in j.get("themes", []):
                 if t in KW_IDS:
                     score[t] = score.get(t, 0) + 2 * j["q"]
+    for t in score:
+        score[t] /= max(1, len(paras))      # the judge's verdict, averaged over the piece
     for kw in KEYWORDS:
-        hits = len(re.findall(kw["pattern"], text, re.I))
-        if hits >= kw.get("min", 2):
-            score[kw["id"]] = score.get(kw["id"], 0) + 3 * hits / (len(text) / 500 + 1)
+        if len(re.findall(kw["pattern"], text, re.I)) >= kw.get("min", 2):
+            score[kw["id"]] = score.get(kw["id"], 0) + density(kw["pattern"], text)
     best = sorted(score, key=lambda k: (-score[k], k))[:MAX_THEMES]
     kws = []
     for kw in best:
-        kws.append(kw)
-        kws += [f"{kw}/{s['id']}" for s in SUBS.get(kw, []) if re.search(s["pattern"], text, re.I)]
+        kws.append((kw, score[kw]))
+        for s in SUBS.get(kw, []):
+            # a subcategory is sorted on its own presence, plus the theme's strength
+            if re.search(s["pattern"], text, re.I):
+                kws.append((f"{kw}/{s['id']}", score[kw] + density(s["pattern"], text)))
     return kws
 
 
@@ -258,8 +269,12 @@ def excerpts_for(path, turns, synopsis=""):
         src = source(speaker)
         num = NUMS.get(anchor) or (i and NUMS.get(turns[i - 1][1]))
         for k, (text, plist) in enumerate(grouped(paras), 1):
-            e = {"id": f"{slug}-{anchor.strip('!')}-{k}", "kws": themes_of(text, plist) if src else [],
+            themed = themes_of(text, plist) if src else []
+            e = {"id": f"{slug}-{anchor.strip('!')}-{k}", "kws": [t for t, _ in themed],
                  "s": path, "a": anchor, "t": text, "by": src or speaker}
+            if themed:
+                # how strongly the piece belongs to each theme; the site sorts pages on it
+                e["w"] = {t: round(s, 1) for t, s in themed}
             if src:
                 e["r"] = 1
                 if k == 1:
