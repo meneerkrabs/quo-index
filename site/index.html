@@ -54,6 +54,7 @@
             padding: 1.1rem 1.4rem; margin: 0 0 1.25rem; }
   article p { margin: 0 0 .75rem; }
   article .q { color: var(--muted); font-size: .95em; }
+  article .q.none { font: italic .8rem system-ui, sans-serif; }
   mark { background: var(--mark); color: inherit; padding: 0 .1em; border-radius: 2px; }
   .src { font: .82rem/1.5 system-ui, sans-serif; color: var(--muted); margin: 0; }
   .tags a { margin-right: .6rem; }
@@ -101,6 +102,7 @@
     <select id="src" aria-label="Source"></select>
     <select id="y1" aria-label="From year"></select>
     <select id="y2" aria-label="To year"></select>
+    <select id="ord" aria-label="Order"><option value="old">Oldest first</option><option value="new">Newest first</option></select>
   </div>
 </header>
 <main id="main"></main>
@@ -125,7 +127,7 @@
 const BASE = 'https://www.llresearch.org';
 const $ = id => document.getElementById(id);
 const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const main = $('main'), q = $('q'), src = $('src'), y1 = $('y1'), y2 = $('y2');
+const main = $('main'), q = $('q'), src = $('src'), y1 = $('y1'), y2 = $('y2'), ord = $('ord');
 let D, all = [], shown = 100, labels = {};   // all: the excerpts in date order
 
 const slug = s => s.replace('/channeling/', '').replace(/\//g, '-');
@@ -155,7 +157,8 @@ function card(g, term) {
   let t = esc(g.t);
   if (term) t = t.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
   const tags = g.kws.map(k => `<a href="#/k/${k}">${esc(labels[k] || k)}</a>`).join('');
-  const qn = g.q ? `<p class="q"><b>${esc(g.qb)}:</b> ${esc(g.q)}</p>` : '';
+  const qn = g.q ? `<p class="q"><b>${esc(g.qb)}:</b> ${esc(g.q)}</p>`
+    : `<p class="q none">No question recorded: from a message the source gave unprompted.</p>`;
   return `<article data-id="${g.id}">${qn}<p><b>${esc(g.by)}:</b> ${t}</p>
     <p class="src">${esc(g.by)}${g.n ? ' ' + g.n : ''}, <a href="${BASE}${g.s}#${g.a}">${esc(sessionName(s))}</a> ·
     ©${s.date.slice(0, 4)} by L/L Research (Louisville, KY) · <a href="${BASE}${g.s}">read the full session</a> ·
@@ -171,7 +174,8 @@ function page(hits, term) {
 
 function filtered() {
   const by = src.value, a = y1.value, b = y2.value;
-  return all.filter(g => (!by || g.by === by) && year(g) >= a && year(g) <= b);
+  const hits = all.filter(g => (!by || g.by === by) && year(g) >= a && year(g) <= b);
+  return ord.value === 'new' ? hits.reverse() : hits;
 }
 
 function render() {
@@ -187,7 +191,7 @@ function render() {
     const chips = (kw.subs || []).length ? `<div class="chips"><a href="#/k/${kw.id}" class="${key === kw.id ? 'on' : ''}">All (${inKw.length})</a>` +
       kw.subs.map(s => { const id = kw.id + '/' + s.id;
         return `<a href="#/k/${id}" class="${key === id ? 'on' : ''}">${esc(s.label)} (${inKw.filter(g => g.kws.includes(id)).length})</a>`; }).join('') + '</div>' : '';
-    out = `<h2>${esc(labels[key])}</h2><p class="count">${hits.length} excerpts, oldest first</p>${chips}` + page(hits) + back;
+    out = `<h2>${esc(labels[key])}</h2><p class="count">${hits.length} excerpts, ${ord.value === 'new' ? 'newest' : 'oldest'} first</p>${chips}` + page(hits) + back;
   } else if ((m = h.match(/^#\/e\/(.+)/))) {
     const g = all.find(g => g.id === decodeURIComponent(m[1]));
     out = g ? `<h2>Excerpt</h2><p class="count">Permanent link to this excerpt</p>` + card(g)
@@ -229,7 +233,7 @@ fetch('data.json').then(r => r.json()).then(d => { D = d; prepare(); render(); }
 const reset = () => { shown = 100; render(); };
 addEventListener('hashchange', () => { q.value = ''; reset(); scrollTo(0, 0); });
 q.addEventListener('input', reset);
-[src, y1, y2].forEach(el => el.addEventListener('change', () => {
+[src, y1, y2, ord].forEach(el => el.addEventListener('change', () => {
   if (y1.value > y2.value) (el === y1 ? y2 : y1).value = el.value;
   reset();
 }));
