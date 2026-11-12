@@ -21,7 +21,8 @@ MODEL = "opencode-go/deepseek-v4.1-flash"
 MAX_EXCERPTS = 6
 STOP = set("""the and for that this with what does about are how why from have has was were which when
 who whom you your can could would should there their them they will into than then been being not but
-een het de van en is wat hoe waarom over met voor dat die zijn niet maar ook kan wil mij mijn naar""".split())
+een het de van en is wat hoe waarom over met voor dat die zijn niet maar ook kan wil mij mijn naar
+excerpt excerpts mean means meaning explain passage fragment betekent bedoelt uitleg uitleggen hier here says said tell""".split())
 
 PROMPT = """Do not use any tools; answer directly.
 
@@ -33,6 +34,9 @@ excerpts below. Rules you never break:
   the sources.
 - You do not claim that anything in the excerpts is true. Report it as what the source
   says ("Q'uo says…", "in this excerpt Ra describes…").
+- When an excerpt is marked as the one the reader is looking at, their question is about that
+  excerpt: explain it, and use the background excerpts only to clarify it. Never ask which
+  excerpt they mean.
 - Stay with the excerpts. Cite them as [1], [2]. If they do not answer the question, say
   so plainly instead of filling in from elsewhere.
 - Explain in plain words; unpack the jargon. At most about 180 words.
@@ -57,8 +61,12 @@ def load():
 
 
 def find(question, ids, by_id, data):
-    """The excerpts the reader pointed at, topped up with a plain word search."""
-    picked = [by_id[i] for i in ids if i in by_id][:MAX_EXCERPTS]
+    """The excerpts the reader pointed at come first and are the focus; they are topped
+    up with the other excerpts of the same session and a plain word search."""
+    focus = [by_id[i] for i in ids if i in by_id][:3]
+    picked = list(focus)
+    for f in focus:
+        picked += [e for e in data["excerpts"] if e["s"] == f["s"] and e not in picked][:MAX_EXCERPTS - 1 - len(picked)]
     words = {w for w in re.findall(r"[a-zà-ÿ']{4,}", question.lower()) if w not in STOP}
     if words and len(picked) < MAX_EXCERPTS:
         def score(e):
@@ -66,12 +74,12 @@ def find(question, ids, by_id, data):
             return sum(text.count(w) for w in words) + 3 * sum(w in " ".join(e["kws"]) for w in words)
         ranked = sorted(((score(e), e) for e in data["excerpts"] if e not in picked), key=lambda x: -x[0])
         picked += [e for s, e in ranked[:MAX_EXCERPTS - len(picked)] if s > 0]
-    return picked
+    return picked, len(focus)
 
 
 def ask(question, ids, history):
     data, by_id = load()
-    picked = find(question, ids, by_id, data)
+    picked, focus = find(question, ids, by_id, data)
     if not picked:
         return {"answer": "I found no excerpts on that in this index. Try one of the keywords, "
                           "or ask me about an excerpt you have open.", "sources": []}
@@ -79,7 +87,8 @@ def ask(question, ids, history):
     for n, e in enumerate(picked, 1):
         s = data["sessions"][e["s"]]
         asked = f"\n(asked by {e['qb']}: {e['q']})" if e.get("q") else ""
-        blocks.append(f"[{n}] {e['by']}, {s['title']} ({s['date']}){asked}\n{e['t']}")
+        role = " — THE EXCERPT THE READER IS LOOKING AT" if n <= focus else " — background" if focus else ""
+        blocks.append(f"[{n}]{role}\n{e['by']}, {s['title']} ({s['date']}){asked}\n{e['t']}")
     past = "\n".join(f"{h['role']}: {h['text'][:600]}" for h in history[-4:]) or "(nothing yet)"
     prompt = PROMPT % ("\n\n".join(blocks), past, question[:1000])
     with tempfile.TemporaryDirectory() as empty:

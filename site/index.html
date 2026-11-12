@@ -271,8 +271,8 @@ $('helper-form').addEventListener('submit', async e => {
   const question = hq.value.trim();
   if (!question) return;
   hq.value = '';
-  // context: the excerpt the reader pointed at, else the first ones on screen
-  const ids = focusIds.length ? focusIds : [...main.querySelectorAll('article[data-id]')].slice(0, 3).map(a => a.dataset.id);
+  // context: the excerpt the reader pointed at; without one the helper searches the index
+  const ids = focusIds;
   say(esc(question), 'me');
   const wait = say('<i>The helper unrolls his papyrus…</i>');
   try {

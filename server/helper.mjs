@@ -43,6 +43,9 @@ excerpts you are given. Rules you never break:
   the sources.
 - You do not claim that anything in the excerpts is true. Report it as what the source
   says ("Q'uo says…", "in this excerpt Ra describes…").
+- When an excerpt is marked as the one the reader is looking at, their question is about that
+  excerpt: explain it, and use the background excerpts only to clarify it. Never ask which
+  excerpt they mean.
 - Stay with the excerpts. Cite them as [1], [2]. If they do not answer the question, say
   so plainly instead of filling in from elsewhere.
 - Explain in plain words; unpack the jargon. At most about 180 words. Plain text, no markdown.
@@ -53,7 +56,8 @@ excerpts you are given. Rules you never break:
 
 const STOP = new Set(`the and for that this with what does about are how why from have has was were which when
 who whom you your can could would should there their them they will into than then been being not but
-een het de van en is wat hoe waarom over met voor dat die zijn niet maar ook kan wil mij mijn naar`.split(/\s+/));
+een het de van en is wat hoe waarom over met voor dat die zijn niet maar ook kan wil mij mijn naar
+excerpt excerpts mean means meaning explain passage fragment betekent bedoelt uitleg uitleggen hier here says said tell`.split(/\s+/));
 
 // data.json is reloaded when the site is redeployed
 let data = null, byId = null, stamp = 0;
@@ -66,8 +70,16 @@ function load() {
   }
 }
 
+// The excerpts the reader pointed at come first and are the focus. They are topped up
+// with the other excerpts of the same session (its context) and a plain word search.
 function find(question, ids) {
-  const picked = ids.map((i) => byId.get(i)).filter(Boolean).slice(0, MAX_EXCERPTS);
+  const focus = ids.map((i) => byId.get(i)).filter(Boolean).slice(0, 3);
+  const picked = [...focus];
+  for (const f of focus) {
+    for (const e of data.excerpts) {
+      if (picked.length < MAX_EXCERPTS - 1 && e.s === f.s && !picked.includes(e)) picked.push(e);
+    }
+  }
   const words = [...new Set((question.toLowerCase().match(/[a-zà-ÿ']{4,}/g) || []).filter((w) => !STOP.has(w)))];
   if (words.length && picked.length < MAX_EXCERPTS) {
     const count = (text, w) => text.split(w).length - 1;
@@ -77,7 +89,7 @@ function find(question, ids) {
     }).filter(([s]) => s > 0).sort((a, b) => b[0] - a[0]);
     picked.push(...ranked.slice(0, MAX_EXCERPTS - picked.length).map(([, e]) => e));
   }
-  return picked;
+  return { picked, focus: focus.length };
 }
 
 // limits live here because sslh hides client addresses from nginx
@@ -134,13 +146,14 @@ async function ask(req, res) {
   if (limited) return reply(res, 429, { error: limited === 'busy' ? 'the helper is busy, try again later' : 'too many questions this hour' });
 
   load();
-  const picked = find(question, ids);
+  const { picked, focus } = find(question, ids);
   if (!picked.length) {
     return reply(res, 200, { answer: 'I found no excerpts on that in this index. Try one of the keywords, or ask me about an excerpt you have open.', sources: [] });
   }
   const blocks = picked.map((e, n) => {
     const s = data.sessions[e.s];
-    return `[${n + 1}] ${e.by}, ${s.title} (${s.date})${e.q ? `\n(asked by ${e.qb}: ${e.q})` : ''}\n${e.t}`;
+    const role = n < focus ? ' — THE EXCERPT THE READER IS LOOKING AT' : focus ? ' — background' : '';
+    return `[${n + 1}]${role}\n${e.by}, ${s.title} (${s.date})${e.q ? `\n(asked by ${e.qb}: ${e.q})` : ''}\n${e.t}`;
   }).join('\n\n');
   const answer = await complete([{ role: 'system', content: `${SYSTEM}\n\n--- Excerpts ---\n${blocks}\n--- End of excerpts ---` },
     ...history, { role: 'user', content: question }]);
