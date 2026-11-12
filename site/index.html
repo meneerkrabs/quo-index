@@ -21,11 +21,14 @@
   header { padding-top: 2.5rem; }
   h1 { font-size: 2rem; font-weight: normal; margin: 0; letter-spacing: .01em; }
   h1 a { color: inherit; text-decoration: none; }
-  .sub { color: var(--muted); margin: .25rem 0 1.5rem; font-style: italic; }
-  .bar { display: flex; gap: .6rem; }
+  .sub { color: var(--muted); margin: .25rem 0 1rem; font-style: italic; }
+  nav { font: .95rem system-ui, sans-serif; margin: 0 0 1rem; display: flex; gap: 1.2rem; }
+  nav a { text-decoration: none; }
+  nav a.on { color: var(--ink); border-bottom: 2px solid var(--accent); }
+  .bar { display: flex; gap: .6rem; flex-wrap: wrap; }
   select, button { font: .95rem system-ui, sans-serif; color: var(--ink); background: var(--card);
-         border: 1px solid var(--line); border-radius: 6px; padding: .6rem .8rem; cursor: pointer; }
-  input[type=search] { flex: 1; min-width: 0; padding: .7rem .9rem; font: inherit; color: var(--ink);
+         border: 1px solid var(--line); border-radius: 6px; padding: .6rem .7rem; cursor: pointer; }
+  input[type=search] { flex: 1 1 14rem; min-width: 0; padding: .7rem .9rem; font: inherit; color: var(--ink);
          background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
   h2 { font-weight: normal; font-size: 1.5rem; margin: 2rem 0 .25rem; }
   .count { color: var(--muted); font-size: .9rem; margin: 0 0 1.5rem;
@@ -33,9 +36,19 @@
   .kws { list-style: none; padding: 0; margin: 2rem 0; columns: 3 11rem; column-gap: 2rem; }
   .kws li { break-inside: avoid; padding: .2rem 0; display: flex; justify-content: space-between;
             border-bottom: 1px dotted var(--line); }
-  .kws a { text-decoration: none; }
-  .kws a:hover { text-decoration: underline; }
-  .kws span { color: var(--muted); font: .8rem system-ui, sans-serif; align-self: center; }
+  .kws a, .list a { text-decoration: none; }
+  .kws a:hover, .list a:hover { text-decoration: underline; }
+  .kws span, .list span { color: var(--muted); font: .8rem system-ui, sans-serif; align-self: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin: 0 0 1.5rem; font: .85rem system-ui, sans-serif; }
+  .chips a { text-decoration: none; padding: .25rem .7rem; border: 1px solid var(--line);
+             border-radius: 999px; background: var(--card); }
+  .chips a.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .list { list-style: none; padding: 0; margin: 0 0 1rem; }
+  .list li { display: flex; justify-content: space-between; gap: 1rem; padding: .25rem 0;
+             border-bottom: 1px dotted var(--line); }
+  details { border-bottom: 1px solid var(--line); padding: .35rem 0; }
+  summary { cursor: pointer; font: 1rem system-ui, sans-serif; }
+  summary span { color: var(--muted); font-size: .8rem; margin-left: .5rem; }
   article { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
             padding: 1.1rem 1.4rem; margin: 0 0 1.25rem; }
   article p { margin: 0 0 .75rem; }
@@ -51,10 +64,13 @@
 <body>
 <header>
   <h1><a href="#/">Confederation sources by keyword</a></h1>
-  <p class="sub">Short excerpts from the Q’uo, Latwii, Hatonn, Laitos, Oxal, L/Leema and Yadda channelings of L/L Research, each linked to its full session.</p>
+  <p class="sub">Short excerpts from the Ra, Q’uo, Latwii, Hatonn and other channelings of L/L Research, each linked to its full session.</p>
+  <nav><a href="#/" id="n-k">Keywords</a><a href="#/sessions" id="n-s">Sessions</a><a href="#/random" id="n-r">Random excerpt</a></nav>
   <div class="bar">
     <input type="search" id="q" placeholder="Search the excerpts…" aria-label="Search the excerpts">
     <select id="src" aria-label="Source"></select>
+    <select id="y1" aria-label="From year"></select>
+    <select id="y2" aria-label="To year"></select>
   </div>
 </header>
 <main id="main"></main>
@@ -66,24 +82,43 @@
 </footer>
 <script>
 const BASE = 'https://www.llresearch.org';
+const $ = id => document.getElementById(id);
 const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const main = document.getElementById('main'), q = document.getElementById('q'), src = document.getElementById('src');
-let D, all = [], shown = 100;   // all: the excerpts in date order
+const main = $('main'), q = $('q'), src = $('src'), y1 = $('y1'), y2 = $('y2');
+let D, all = [], shown = 100, labels = {};   // all: the excerpts in date order
+
+const slug = s => s.replace('/channeling/', '').replace(/\//g, '-');
+const year = g => D.sessions[g.s].date.slice(0, 4);
+const fmt = d => new Date(d + 'T12:00').toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+const sessionName = s => s.kind ? s.title + ' · ' + s.kind : s.title + ', ' + fmt(s.date);
 
 function prepare() {
-  all = D.excerpts.slice().sort((a, b) => a.s.localeCompare(b.s) || a.a.localeCompare(b.a, undefined, {numeric: true}));
+  const d = g => D.sessions[g.s].date;
+  all = D.excerpts.slice().sort((a, b) => d(a).localeCompare(d(b)) || a.s.localeCompare(b.s) ||
+    a.a.localeCompare(b.a, undefined, {numeric: true}));
+  for (const k of D.keywords) {
+    labels[k.id] = k.label;
+    for (const s of k.subs || []) labels[k.id + '/' + s.id] = s.label;
+  }
+  const n = {}; all.forEach(g => n[g.by] = (n[g.by] || 0) + 1);
+  src.innerHTML = '<option value="">All sources</option>' + Object.keys(n).sort((a, b) => n[b] - n[a])
+    .map(s => `<option value="${esc(s)}">${esc(s)} (${n[s]})</option>`).join('');
+  const ys = [...new Set(all.map(year))].sort();
+  y1.innerHTML = ys.map(y => `<option>${y}</option>`).join('');
+  y2.innerHTML = y1.innerHTML;
+  y1.value = ys[0]; y2.value = ys[ys.length - 1];
 }
-const label = id => D.keywords.find(k => k.id === id).label;
 
 function card(g, term) {
-  const s = D.sessions[g.s], year = s.date.slice(0, 4);
+  const s = D.sessions[g.s];
   let t = esc(g.t);
   if (term) t = t.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
-  const tags = g.kws.map(k => `<a href="#/k/${k}">${esc(label(k))}</a>`).join('');
+  const tags = g.kws.map(k => `<a href="#/k/${k}">${esc(labels[k] || k)}</a>`).join('');
   const qn = g.q ? `<p class="q"><b>${esc(g.qb)}:</b> ${esc(g.q)}</p>` : '';
   return `<article>${qn}<p><b>${esc(g.by)}:</b> ${t}</p>
-    <p class="src">${esc(g.by)}, <a href="${BASE}${g.s}#${g.a}">${esc(s.title)}</a> · ${esc(s.kind)} ·
-    ©${year} by L/L Research (Louisville, KY) · <a href="${BASE}${g.s}">read the full session</a></p>
+    <p class="src">${esc(g.by)}${g.n ? ' ' + g.n : ''}, <a href="${BASE}${g.s}#${g.a}">${esc(sessionName(s))}</a> ·
+    ©${s.date.slice(0, 4)} by L/L Research (Louisville, KY) · <a href="${BASE}${g.s}">read the full session</a> ·
+    <a href="#/s/${slug(g.s)}">excerpts of this session</a> · <a href="#/e/${g.id}">permalink</a></p>
     <p class="src tags">${tags}</p></article>`;
 }
 
@@ -92,37 +127,74 @@ function page(hits, term) {
     (hits.length > shown ? `<p><button id="more">Show more (${hits.length - shown} left)</button></p>` : '');
 }
 
+function filtered() {
+  const by = src.value, a = y1.value, b = y2.value;
+  return all.filter(g => (!by || g.by === by) && year(g) >= a && year(g) <= b);
+}
+
 function render() {
-  const by = src.value, groups = by ? all.filter(g => g.by === by) : all;
-  const term = q.value.trim(), m = location.hash.match(/^#\/k\/([\w-]+)/);
-  let h = '';
+  const term = q.value.trim(), h = location.hash, groups = filtered();
+  const back = `<a class="back" href="#/">← All keywords</a>`;
+  let m, out = '', tab = 'k';
   if (term.length > 1) {
-    const hits = groups.filter(g => g.t.toLowerCase().includes(term.toLowerCase()));
-    h = `<h2>“${esc(term)}”</h2><p class="count">${hits.length} excerpts</p>` + page(hits, term);
-  } else if (m && D.keywords.some(k => k.id === m[1])) {
-    const hits = groups.filter(g => g.kws.includes(m[1]));
-    h = `<h2>${esc(label(m[1]))}</h2><p class="count">${hits.length} excerpts, oldest first</p>` +
-        page(hits) + `<a class="back" href="#/">← All keywords</a>`;
+    const hits = groups.filter(g => (g.t + ' ' + (g.q || '')).toLowerCase().includes(term.toLowerCase()));
+    out = `<h2>“${esc(term)}”</h2><p class="count">${hits.length} excerpts</p>` + page(hits, term);
+  } else if ((m = h.match(/^#\/k\/([\w-]+)(?:\/([\w-]+))?/)) && labels[m[1]]) {
+    const kw = D.keywords.find(k => k.id === m[1]), key = m[2] && labels[m[1] + '/' + m[2]] ? m[1] + '/' + m[2] : m[1];
+    const inKw = groups.filter(g => g.kws.includes(m[1])), hits = groups.filter(g => g.kws.includes(key));
+    const chips = (kw.subs || []).length ? `<div class="chips"><a href="#/k/${kw.id}" class="${key === kw.id ? 'on' : ''}">All (${inKw.length})</a>` +
+      kw.subs.map(s => { const id = kw.id + '/' + s.id;
+        return `<a href="#/k/${id}" class="${key === id ? 'on' : ''}">${esc(s.label)} (${inKw.filter(g => g.kws.includes(id)).length})</a>`; }).join('') + '</div>' : '';
+    out = `<h2>${esc(labels[key])}</h2><p class="count">${hits.length} excerpts, oldest first</p>${chips}` + page(hits) + back;
+  } else if ((m = h.match(/^#\/e\/(.+)/))) {
+    const g = all.find(g => g.id === decodeURIComponent(m[1]));
+    out = g ? `<h2>Excerpt</h2><p class="count">Permanent link to this excerpt</p>` + card(g)
+            : `<h2>Excerpt not found</h2><p class="count">This excerpt is no longer part of the index.</p>`;
+    out += back;
+  } else if (h.startsWith('#/random')) {
+    tab = 'r';
+    const g = groups[Math.floor(Math.random() * groups.length)];
+    out = `<h2>Random excerpt</h2><p class="count">One of ${groups.length} excerpts</p>` + (g ? card(g) : '') +
+      `<p><button id="again">Another one</button></p>`;
+  } else if ((m = h.match(/^#\/s\/(.+)/))) {
+    tab = 's';
+    const path = Object.keys(D.sessions).find(p => slug(p) === m[1]), s = D.sessions[path];
+    const hits = all.filter(g => g.s === path);
+    out = s ? `<h2>${esc(sessionName(s))}</h2><p class="count">${hits.length} excerpts ·
+      <a href="${BASE}${path}">read the full session on llresearch.org</a></p>` + hits.map(g => card(g)).join('')
+      : `<h2>Session not found</h2>`;
+    out += `<a class="back" href="#/sessions">← All sessions</a>`;
+  } else if (h.startsWith('#/sessions')) {
+    tab = 's';
+    const per = {}; groups.forEach(g => { (per[g.s] = per[g.s] || {n: 0, by: new Set()}).n++; per[g.s].by.add(g.by); });
+    const byYear = {}; Object.keys(per).forEach(p => (byYear[D.sessions[p].date.slice(0, 4)] ||= []).push(p));
+    out = `<h2>Sessions</h2><p class="count">${Object.keys(per).length} sessions with excerpts</p>` +
+      Object.keys(byYear).sort().map(y => `<details><summary>${y}<span>${byYear[y].length} sessions</span></summary><ul class="list">` +
+        byYear[y].sort((a, b) => D.sessions[a].date.localeCompare(D.sessions[b].date) || a.localeCompare(b, undefined, {numeric: true}))
+          .map(p => `<li><a href="#/s/${slug(p)}">${esc(sessionName(D.sessions[p]))}</a><span>${[...per[p].by].map(esc).join(', ')} · ${per[p].n}</span></li>`).join('') +
+        '</ul></details>').join('');
   } else {
-    const n = Object.keys(D.sessions).length, years = Object.values(D.sessions).map(s => s.date.slice(0, 4)).sort();
-    h = `<p class="count">${groups.length} excerpts from ${n} sessions, ${years[0] === years[years.length - 1] ? years[0] : years[0] + '–' + years[years.length - 1]}</p><ul class="kws">` +
+    const n = new Set(groups.map(g => g.s)).size;
+    out = `<p class="count">${groups.length} excerpts from ${n} sessions</p><ul class="kws">` +
       D.keywords.map(k => [k, groups.filter(g => g.kws.includes(k.id)).length]).filter(x => x[1])
         .map(([k, c]) => `<li><a href="#/k/${k.id}">${esc(k.label)}</a><span>${c}</span></li>`).join('') + '</ul>';
   }
-  main.innerHTML = h;
+  main.innerHTML = out;
+  for (const t of ['k', 's', 'r']) $('n-' + t).className = t === tab && !term ? 'on' : '';
 }
 
-fetch('data.json').then(r => r.json()).then(d => {
-  D = d; prepare();
-  const n = {}; all.forEach(g => n[g.by] = (n[g.by] || 0) + 1);
-  src.innerHTML = '<option value="">All sources</option>' + Object.keys(n).sort((a, b) => n[b] - n[a])
-    .map(s => `<option value="${esc(s)}">${esc(s)} (${n[s]})</option>`).join('');
-  render();
+fetch('data.json').then(r => r.json()).then(d => { D = d; prepare(); render(); });
+const reset = () => { shown = 100; render(); };
+addEventListener('hashchange', () => { q.value = ''; reset(); scrollTo(0, 0); });
+q.addEventListener('input', reset);
+[src, y1, y2].forEach(el => el.addEventListener('change', () => {
+  if (y1.value > y2.value) (el === y1 ? y2 : y1).value = el.value;
+  reset();
+}));
+main.addEventListener('click', e => {
+  if (e.target.id === 'more') { shown += 100; render(); }
+  if (e.target.id === 'again') render();
 });
-addEventListener('hashchange', () => { q.value = ''; shown = 100; render(); scrollTo(0, 0); });
-q.addEventListener('input', () => { shown = 100; render(); });
-src.addEventListener('change', () => { shown = 100; render(); });
-main.addEventListener('click', e => { if (e.target.id === 'more') { shown += 100; render(); } });
 </script>
 </body>
 </html>

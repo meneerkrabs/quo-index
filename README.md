@@ -1,6 +1,6 @@
 # Confederation sources by keyword
 
-An unofficial keyword index of short excerpts from the Q’uo, Latwii, Hatonn, Laitos, Oxal, L/Leema and Yadda channelings
+An unofficial keyword index of short excerpts from the Ra, Q’uo, Latwii, Hatonn and other Confederation channelings
 published by [L/L Research](https://www.llresearch.org). Every excerpt links to the
 exact place in the full session on llresearch.org.
 
@@ -27,11 +27,15 @@ If L/L Research would like anything changed or removed, please open an issue.
 - `keywords.json` lists the keywords and the patterns that match them.
 - `build.py 1986 1987 …` reads the sessions of those years, one request at a time with
   a pause in between, and writes `site/data.json`.
-- `site/index.html` is a static page that shows the excerpts per keyword and searches them.
+- `site/index.html` is a static page: excerpts per keyword and subcategory, search, filters
+  on source and years, a list of sessions, a random excerpt and a permanent link per excerpt.
 
-Excerpts are chosen by word match, so broad keywords also return less relevant passages.
+Excerpts are chosen by word match. A keyword must occur at least twice in a paragraph
+(once for specific terms, three times for very broad ones such as "love"); see `min` in
+`keywords.json`. `python3 build.py cache` rebuilds everything from the local cache.
 
 ```bash
 python3 build.py 1986
+python3 build.py ra          # the Ra Contact sessions
 python3 -m http.server --directory site
 ```
