@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Love/Light Index: Ra, Q’uo and the Confederation by theme</title>
-<meta name="description" content="The channelings of L/L Research — Ra, Q’uo, Hatonn, Latwii and the others — by theme, every session whole, with the question that was asked and a link to the original page. Unofficial study index.">
+<meta name="description" content="The channelings of L/L Research (Ra, Q’uo, Hatonn, Latwii and the others) by theme, every session whole, with the question that was asked and a link to the original page. Unofficial study index.">
 <style>
   :root {
     --bg: #f6f2ea; --ink: #23201b; --muted: #746c5f; --line: #ddd4c4;
@@ -146,7 +146,7 @@ const sessionName = s => s.kind ? s.title + ' · ' + s.kind : s.title + ', ' + f
 // What each source says about itself, in its own words. Every quote links to its session.
 const SOURCES = [
   {name: 'Ra',
-   text: 'A social memory complex — as they put it, a group of souls sharing one memory and one identity — of the sixth density, and, they say, the same source the Egyptians once knew as Ra. In their contact with this group, 1981 to 1984, they asked to be called “an humble messenger of the Law of One”.',
+   text: 'A social memory complex (as they put it, a group of souls sharing one memory and one identity) of the sixth density, and, they say, the same source the Egyptians once knew as Ra. In their contact with this group, 1981 to 1984, they asked to be called “an humble messenger of the Law of One”.',
    quote: 'Ra is of the sixth density where love and light are unified.', s: '/channeling/ra-contact/1'},
   {name: 'Q’uo',
    text: 'Not a single being but a principle: a combined energy of other groups, mainly those of Ra, Latwii and Hatonn, speaking since 1984, and mostly from what they call the fifth density, the density of wisdom.',
@@ -158,7 +158,7 @@ const SOURCES = [
    text: 'The first source to be in long-term contact with this group, and the one with the lightest touch: Ra calls Latwii the wisdom density, and Latwii itself says it speaks from a light that is not yet perfect.',
    quote: 'Our relationship to that which is Kamaloca is that we are in a light density which is less than full of perfect light.', s: '/channeling/1980/0727'},
   {name: 'Laitos',
-   text: 'Of the fourth-density vibration, “love seeking wisdom”, and with a special task in the early years: conditioning new channels — training the group’s instruments — and giving short meditations.',
+   text: 'Of the fourth-density vibration, “love seeking wisdom”, and with a special task in the early years: conditioning new channels (training the group’s instruments) and giving short meditations.',
    quote: 'We are of your fourth-density vibration moving upon vibratory patterns of love seeking wisdom.', s: '/channeling/1987/0218'},
   {name: 'Oxal',
    text: 'Of the wisdom density, which they place two grades above our own, and, they say, still seeking: looking for the density where wisdom is blended with compassion.',
@@ -170,10 +170,10 @@ const SOURCES = [
    text: 'A playful contact of the mid-1980s, with an accent and a joke in nearly every message.',
    quote: 'We are full of error and mistake, folly and fun.', s: '/channeling/1985/0512'},
   {name: 'Yom',
-   text: 'Of the density of light — five, in the numbering used on this site — and speaking with this group from 1986.',
+   text: 'Of the density of light (five, in the numbering used on this site), speaking with this group from 1986.',
    quote: 'We seek at present within the density of light which is, according to the numbering system we are familiar with associated with this group, being five.', s: '/channeling/1989/0423'},
   {name: 'Quanta',
-   text: 'Says it is a blend of two worlds: the metaphysical planes outside this planet and the planes within it — the inner planes — and speaks of the unseen population of those planes.',
+   text: 'Says it is a blend of two worlds: the metaphysical planes outside this planet and the planes within it (the inner planes), and speaks of the unseen population of those planes.',
    quote: 'We are of a vibration which is a blend of two worlds—the metaphysical planes exterior to your planet and the metaphysical planes interior to its sphere of influence.', s: '/channeling/1987/0318'},
   {name: 'Monka',
    text: 'A member of the Confederation with a specialty in community and social responsibilities, and with a life in fourth density behind it.',
@@ -204,7 +204,7 @@ function aboutPage() {
     <p>Every session says who is speaking, and nearly all of them introduce themselves as members of the
     Confederation of Planets in the Service of the One Infinite Creator: as they tell it, beings of other
     planets and planes who have chosen to serve those still in this one. Each also places itself on the
-    ladder of <a href="#/k/densities">densities</a> — the third being the one we are said to inhabit.
+    ladder of <a href="#/k/densities">densities</a>: the third being the one we are said to inhabit.
     This site takes no position on whether any of it is true; it only reports what the sessions say, with the
     session each sentence comes from. From 1972 until her death in 2015 most of these messages came through
     the vocal channel Carla Rueckert; the sessions since come through other instruments in the same circle.</p>
@@ -272,7 +272,7 @@ function render() {
   const busy = (!home && !sessionsView && !sourcesView) || (home && active);
   if (busy && !all) {
     loadCorpus().then(render, err => {
-      main.innerHTML = `<h2>Could not load the index</h2><p class="count">${esc(String(err))} — try reloading the page.</p>`;
+      main.innerHTML = `<h2>Could not load the index</h2><p class="count">${esc(String(err))}. Try reloading the page.</p>`;
     });
     return;
   }
@@ -337,7 +337,7 @@ function render() {
     const n = all ? new Set(groups.map(g => g.s)).size : Object.keys(IDX.sessions).length;
     const total = all ? groups.length : IDX.total;
     const cnt = k => all ? groups.filter(g => g.kws.includes(k.id)).length : k.n;
-    out = `<p class="count">${total} pieces from ${n} sessions — the whole text, by theme, with the question
+    out = `<p class="count">${total} pieces from ${n} sessions: the whole text, by theme, with the question
       and a link to every original page</p><ul class="kws">` +
       IDX.keywords.filter(k => cnt(k)).map(k => `<li><a href="#/k/${k.id}">${esc(k.label)}</a><span>${cnt(k)}</span></li>`).join('') +
       `</ul><p class="count"><a href="#/sources">Who are these sources? →</a></p>`;

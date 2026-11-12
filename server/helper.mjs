@@ -4,7 +4,7 @@
 //   POST /api/guide  {question, ids, history} -> {answer, sources}
 //
 // The model gets pieces that are on the site and, for the piece the reader is looking
-// at, its full session as context (from the site's own corpus.json — nothing is fetched
+// at, its full session as context (from the site's own corpus.json; nothing is fetched
 // from llresearch.org). Modelled on the "astroloog" service of forecast.dtun.nl and reads the
 // same provider keys (OpenAI-compatible APIs, free tiers first):
 //   GROQ_API_KEY, GROQ_MODELS                       Groq, tried first
@@ -175,7 +175,7 @@ async function ask(req, res) {
   }
   const blocks = picked.map((e, n) => {
     const s = data.sessions[e.s];
-    const role = n < focus ? ' — THE EXCERPT THE READER IS LOOKING AT' : focus ? ' — background' : '';
+    const role = n < focus ? ' (the excerpt the reader is looking at)' : focus ? ' (background)' : '';
     return `[${n + 1}]${role}\n${e.by}, ${s.title} (${s.date})${e.q ? `\n(asked by ${e.qb}: ${e.q})` : ''}\n${e.t}`;
   }).join('\n\n');
   let session = '';

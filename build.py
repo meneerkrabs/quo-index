@@ -2,8 +2,8 @@
 """Build the Love/Light Index: the text of the L/L Research channelings, session by
 session and by theme, each piece with credit and a link to its original page.
 
-Every session is kept whole. Each speaker turn becomes one or more pieces — only a very
-long turn is split, and only at paragraph or sentence ends — and no text is ever
+Every session is kept whole. Each speaker turn becomes one or more pieces (only a very
+long turn is split, and only at paragraph or sentence ends), and no text is ever
 shortened, reworded or left out. Pieces are filed under up to MAX_THEMES themes, taken
 from an LLM's reading of the candidates (judge.py) or, where it has no verdict, from the
 patterns in keywords.json.
@@ -12,10 +12,10 @@ A private, git-ignored cache of the pages (.cache/) makes rebuilds cheap and kee
 load on llresearch.org to one visit per page.
 
 Output in site/:
-  index.json   keywords with counts, sessions (title, date, speakers)  — the first thing
-               the site loads, and all it needs for the keyword and session lists
-  corpus.json  every piece of text, in session order                    — loaded once,
-               on demand, for keyword pages, sessions, search and permalinks
+  index.json   keywords with counts, sessions (title, date, speakers): the first thing the
+               site loads, and all it needs for the keyword and session lists
+  corpus.json  every piece of text, in session order: loaded once, on demand, for keyword
+               pages, sessions, search and permalinks
 
 Usage: python3 build.py 1986 [1987 ...]     -> rebuild those years
        python3 build.py ra                     -> the Ra Contact sessions

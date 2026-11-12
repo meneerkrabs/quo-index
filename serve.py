@@ -103,7 +103,7 @@ def ask(question, ids, history):
     for n, e in enumerate(picked, 1):
         s = data["sessions"][e["s"]]
         asked = f"\n(asked by {e['qb']}: {e['q']})" if e.get("q") else ""
-        role = " — THE EXCERPT THE READER IS LOOKING AT" if n <= focus else " — background" if focus else ""
+        role = " (the excerpt the reader is looking at)" if n <= focus else " (background)" if focus else ""
         blocks.append(f"[{n}]{role}\n{e['by']}, {s['title']} ({s['date']}){asked}\n{e['t']}")
     if focus:   # the full session of the piece in view, from the local corpus
         full = session_text(data, picked[0]["s"])

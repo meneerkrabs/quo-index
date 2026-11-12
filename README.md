@@ -24,16 +24,17 @@ If L/L Research would like anything changed or removed, please open an issue.
 - `keywords.json` lists the keywords and the patterns that match them.
 - `build.py 1986 1987 …` reads the sessions of those years, one request at a time with a
   pause in between, and writes the site's two data files.
-- `site/index.json` — keywords with counts, the session list, sources and years. Small
+- `site/index.json`: keywords with counts, the session list, sources and years. Small
   (about 23 KB compressed) and loaded first.
-- `site/corpus.json` — every piece of text (some 36,000 pieces, 33 million characters, about
+- `site/corpus.json`: every piece of text (some 36,000 pieces, 33 million characters, about
   11 MB compressed), loaded once on demand, for keyword pages, sessions, search, permalinks
-  and the random piece.
+  and the random piece. It is asked for as `corpus.json?v=<build time>`, so a browser may
+  keep it while a new build is always a new URL.
 - `site/index.html` is the static page: keywords and subcategories, search, filters on
   source and years, sessions, a random piece, a permanent link per piece, and a page on who
   the sources say they are.
 
-A piece is one speaker turn — questioner turns included — and only a turn longer than 3,000
+A piece is one speaker turn (questioner turns included), and only a turn longer than 3,000
 characters is split, at a paragraph or sentence end, never inside the text. Pieces are filed
 under up to three themes, taken from an LLM's reading of the session (`judge.py`) or, where
 it has no verdict, from the patterns in `keywords.json`. `python3 build.py cache` rebuilds
@@ -46,7 +47,7 @@ everything from the private local page cache without touching llresearch.org.
   session. `serve.py` runs it locally (through the `opencode` CLI); `server/helper.mjs` is
   the public backend behind https://ll.dtun.nl/api/guide (free OpenAI-compatible APIs, rate
   limited). On GitHub Pages there is no backend, so the helper stays hidden there. It reads
-  the site's own corpus — the piece in view and its whole session as context — and refuses
+  the site's own corpus (the piece in view and its whole session as context) and refuses
   to reproduce long passages.
 
 ```bash
