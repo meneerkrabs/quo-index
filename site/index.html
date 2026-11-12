@@ -57,6 +57,30 @@
   .src { font: .82rem/1.5 system-ui, sans-serif; color: var(--muted); margin: 0; }
   .tags a { margin-right: .6rem; }
   .back { font: .9rem system-ui, sans-serif; display: inline-block; margin-top: 1.5rem; }
+  .ask { display: none; }
+  .has-helper .ask { display: inline; }
+  #helper-btn { position: fixed; right: 1.2rem; bottom: 1.2rem; width: 4.2rem; height: 4.2rem; padding: .3rem;
+                border-radius: 50%; border: 2px solid var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+  #helper-btn svg, #helper header svg { width: 100%; height: 100%; display: block; }
+  #helper { position: fixed; right: 1.2rem; bottom: 1.2rem; width: min(26rem, calc(100vw - 2.4rem));
+            max-height: min(38rem, calc(100vh - 2.4rem)); display: flex; flex-direction: column;
+            background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,.3); font: .92rem/1.5 system-ui, sans-serif; }
+  #helper[hidden], #helper-btn[hidden] { display: none; }
+  #helper header { display: flex; align-items: center; gap: .6rem; padding: .6rem .9rem; max-width: none;
+                   border-bottom: 1px solid var(--line); margin: 0; }
+  #helper header span { width: 2.2rem; height: 2.2rem; flex: none; }
+  #helper header b { flex: 1; }
+  #helper header button { border: 0; background: none; font-size: 1.3rem; padding: 0 .3rem; }
+  #helper .warn { margin: 0; padding: .5rem .9rem; font-size: .8rem; color: var(--muted);
+                  border-bottom: 1px solid var(--line); }
+  #helper-log { flex: 1; overflow-y: auto; padding: .7rem .9rem; min-height: 6rem; }
+  #helper-log p { margin: 0 0 .7rem; }
+  #helper-log .me { color: var(--muted); }
+  #helper-log .ctx { font-size: .78rem; color: var(--muted); }
+  #helper form { display: flex; gap: .4rem; padding: .6rem .9rem; border-top: 1px solid var(--line); }
+  #helper form input { flex: 1; min-width: 0; font: inherit; padding: .5rem .6rem; color: var(--ink);
+                       background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
   footer { margin-top: 3rem; padding-bottom: 3rem; border-top: 1px solid var(--line);
            font: .85rem/1.6 system-ui, sans-serif; color: var(--muted); }
 </style>
@@ -80,6 +104,17 @@
   full material is free to read. This is an unofficial index, not affiliated with or endorsed by
   L/L Research. Excerpts longer than one paragraph are shortened and marked […].</p>
 </footer>
+<button id="helper-btn" hidden aria-label="Ask the noble helper" title="Ask the noble helper"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 58 L18 22 Q32 2 46 22 L50 58 Z" fill="#c9962e"/><path d="M17 30h30M16 38h32M15 46h34M14 54h36" stroke="#1f4e79" stroke-width="3"/><ellipse cx="32" cy="31" rx="11" ry="13" fill="#b9793f"/><path d="M25 29q3-2 6 0M34 29q3-2 6 0" stroke="#1b1b1b" stroke-width="1.6" fill="none"/><path d="M24.5 30.5h8M33.5 30.5h8" stroke="#1b1b1b" stroke-width="1"/><path d="M28 38q4 2.5 8 0" stroke="#5a2d12" stroke-width="1.4" fill="none"/><rect x="29.5" y="43" width="5" height="9" rx="2" fill="#1f4e79"/><circle cx="32" cy="14" r="2.6" fill="#b3261e"/></svg></button>
+<aside id="helper" hidden aria-label="The noble helper">
+  <header><span><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M14 58 L18 22 Q32 2 46 22 L50 58 Z" fill="#c9962e"/><path d="M17 30h30M16 38h32M15 46h34M14 54h36" stroke="#1f4e79" stroke-width="3"/><ellipse cx="32" cy="31" rx="11" ry="13" fill="#b9793f"/><path d="M25 29q3-2 6 0M34 29q3-2 6 0" stroke="#1b1b1b" stroke-width="1.6" fill="none"/><path d="M24.5 30.5h8M33.5 30.5h8" stroke="#1b1b1b" stroke-width="1"/><path d="M28 38q4 2.5 8 0" stroke="#5a2d12" stroke-width="1.4" fill="none"/><rect x="29.5" y="43" width="5" height="9" rx="2" fill="#1f4e79"/><circle cx="32" cy="14" r="2.6" fill="#b3261e"/></svg></span><b>The noble helper</b><button id="helper-x" aria-label="Close">×</button></header>
+  <p class="warn">A language model playing a scribe of old Egypt: not Ra, not a channeled source. It can be wrong and
+  claims no truth. Read the channelings in full and in their context on
+  <a href="https://www.llresearch.org">llresearch.org</a>.</p>
+  <div id="helper-log"><p>I am the noble helper, a humble scribe. Ask me about an excerpt you are reading and I will
+  try to unpack it with you.</p></div>
+  <form id="helper-form"><input id="helper-q" placeholder="Ask about what you are reading…" aria-label="Your question"
+    autocomplete="off"><button>Ask</button></form>
+</aside>
 <script>
 const BASE = 'https://www.llresearch.org';
 const $ = id => document.getElementById(id);
@@ -115,10 +150,11 @@ function card(g, term) {
   if (term) t = t.replace(new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
   const tags = g.kws.map(k => `<a href="#/k/${k}">${esc(labels[k] || k)}</a>`).join('');
   const qn = g.q ? `<p class="q"><b>${esc(g.qb)}:</b> ${esc(g.q)}</p>` : '';
-  return `<article>${qn}<p><b>${esc(g.by)}:</b> ${t}</p>
+  return `<article data-id="${g.id}">${qn}<p><b>${esc(g.by)}:</b> ${t}</p>
     <p class="src">${esc(g.by)}${g.n ? ' ' + g.n : ''}, <a href="${BASE}${g.s}#${g.a}">${esc(sessionName(s))}</a> ·
     ©${s.date.slice(0, 4)} by L/L Research (Louisville, KY) · <a href="${BASE}${g.s}">read the full session</a> ·
-    <a href="#/s/${slug(g.s)}">excerpts of this session</a> · <a href="#/e/${g.id}">permalink</a></p>
+    <a href="#/s/${slug(g.s)}">excerpts of this session</a> · <a href="#/e/${g.id}">permalink</a><span class="ask"> ·
+    <a href="#" data-ask="${g.id}">ask the noble helper</a></span></p>
     <p class="src tags">${tags}</p></article>`;
 }
 
@@ -194,6 +230,51 @@ q.addEventListener('input', reset);
 main.addEventListener('click', e => {
   if (e.target.id === 'more') { shown += 100; render(); }
   if (e.target.id === 'again') render();
+});
+
+// The noble helper: only where a local server answers at api/guide (see serve.py).
+let clientId = '';   // random per browser, only for the helper's rate limit
+try { clientId = localStorage.helperId || (localStorage.helperId = crypto.randomUUID()); } catch (e) {}
+const helper = $('helper'), hlog = $('helper-log'), hq = $('helper-q'), history = [];
+let focusIds = [];
+function say(html, cls) { const p = document.createElement('p'); p.className = cls || ''; p.innerHTML = html; hlog.append(p); hlog.scrollTop = hlog.scrollHeight; return p; }
+function openHelper(show) { helper.hidden = !show; $('helper-btn').hidden = show; if (show) hq.focus(); }
+fetch('api/guide').then(r => r.ok ? r.json() : null).then(j => {
+  if (!j || !j.ok) return;
+  document.body.classList.add('has-helper'); $('helper-btn').hidden = false;
+}).catch(() => {});
+$('helper-btn').addEventListener('click', () => openHelper(true));
+$('helper-x').addEventListener('click', () => openHelper(false));
+main.addEventListener('click', e => {
+  const id = e.target.dataset && e.target.dataset.ask;
+  if (!id) return;
+  e.preventDefault();
+  focusIds = [id];
+  const g = all.find(g => g.id === id);
+  openHelper(true);
+  say(`About this excerpt: <a href="#/e/${id}">${esc(g.by)}, ${esc(sessionName(D.sessions[g.s]))}</a>`, 'ctx');
+  if (!hq.value) hq.value = 'What does this excerpt mean?';
+  hq.select();
+});
+$('helper-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const question = hq.value.trim();
+  if (!question) return;
+  hq.value = '';
+  // context: the excerpt the reader pointed at, else the first ones on screen
+  const ids = focusIds.length ? focusIds : [...main.querySelectorAll('article[data-id]')].slice(0, 3).map(a => a.dataset.id);
+  say(esc(question), 'me');
+  const wait = say('<i>The helper unrolls his papyrus…</i>');
+  try {
+    const r = await fetch('api/guide', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Client-Id': clientId},
+      body: JSON.stringify({question, ids, history})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || 'no answer');
+    wait.innerHTML = esc(j.answer.replace(/【(\d+)】/g, '[$1]')).replace(/\n/g, '<br>')
+      .replace(/\[(\d+)\]/g, (m, n) => j.sources[n - 1] ? `<a href="#/e/${j.sources[n - 1]}">[${n}]</a>` : m);
+    history.push({role: 'reader', text: question}, {role: 'helper', text: j.answer});
+  } catch (err) { wait.innerHTML = 'The helper could not answer just now (' + esc(String(err.message)) + ').'; }
+  hlog.scrollTop = hlog.scrollHeight;
 });
 </script>
 </body>

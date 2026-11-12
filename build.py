@@ -30,10 +30,15 @@ DELAY = 1.5            # seconds between requests
 MAX_CHARS = 900        # an excerpt is one paragraph, trimmed to this length
 MAX_PER_SESSION = 4    # never reproduce more than this many excerpts of a session
 MIN_CHARS = 200
+MAX_CANDIDATES = 8     # paragraphs per session offered to the LLM judge
+MIN_QUALITY = 3        # judged excerpts below this (1-5) are dropped
 MAX_Q_CHARS = 400      # the question an excerpt answers is shortened to this
 
 KEYWORDS = json.loads((Path(__file__).parent / "keywords.json").read_text())
 SUBS = {k["id"]: k["subs"] for k in KEYWORDS if k.get("subs")}
+KW_IDS = {k["id"] for k in KEYWORDS}
+JUDGE = Path(__file__).parent / "judgments.json"      # verdicts written by judge.py
+JUDGMENTS = json.loads(JUDGE.read_text()) if JUDGE.exists() else {}
 OUT = Path(__file__).parent / "site" / "data.json"
 CACHE = Path(__file__).parent / ".cache"   # private, git-ignored
 
@@ -149,9 +154,13 @@ def question_for(i, turns, synopsis):
     return {}
 
 
-def excerpts_for(path, turns, synopsis=""):
-    """Pick the best paragraph per keyword, capped per session."""
-    cands = []
+def key_of(p):
+    return hashlib.sha1(p.encode()).hexdigest()[:12]
+
+
+def candidates(turns):
+    """The MAX_CANDIDATES most keyword-dense paragraphs of a session, best first."""
+    found = {}
     for i, (speaker, anchor, paras) in enumerate(turns):
         src = source(speaker)
         if not src:
@@ -163,31 +172,51 @@ def excerpts_for(path, turns, synopsis=""):
                 hits = len(re.findall(kw["pattern"], p, re.I))
                 # a passing mention is not enough: broad words need more hits
                 if hits >= kw.get("min", 2):
+                    c = found.setdefault(p, {"p": p, "a": anchor, "by": src, "i": i, "kws": {}})
                     # density favours paragraphs that are really about the keyword
-                    cands.append((hits / (len(p) / 500 + 1), kw["id"], anchor, p, src, i))
-    cands.sort(key=lambda c: -c[0])
-    used_kw, picked = set(), {}   # picked: paragraph -> excerpt
-    for score, kw, anchor, p, src, i in cands:
-        if kw in used_kw:
-            continue
-        if p not in picked and len(picked) >= MAX_PER_SESSION:
-            continue
-        used_kw.add(kw)
-        if p not in picked:
-            slug = path.replace("/channeling/", "").replace("/", "-")
-            picked[p] = {"id": f"{slug}-{anchor.strip('!')}-{hashlib.sha1(p.encode()).hexdigest()[:6]}",
-                         "kws": [], "s": path, "a": anchor, "t": trim(p), "by": src,
-                         **question_for(i, turns, synopsis)}
-            # numbered Q&A (Ra Contact): link to "13.2" instead of the speaker turn
-            num = NUMS.get(anchor) or (i and NUMS.get(turns[i - 1][1]))
-            if num:
-                picked[p].update(n=num, a=num.split(".")[-1])
-        picked[p]["kws"].append(kw)
-        # subcategories ("densities/third") are judged on the whole paragraph
-        for sub in SUBS.get(kw, []):
-            if re.search(sub["pattern"], p, re.I):
-                picked[p]["kws"].append(f"{kw}/{sub['id']}")
-    return list(picked.values())
+                    c["kws"][kw["id"]] = hits / (len(p) / 500 + 1)
+    return sorted(found.values(), key=lambda c: -max(c["kws"].values()))[:MAX_CANDIDATES]
+
+
+def excerpts_for(path, turns, synopsis=""):
+    """Pick at most MAX_PER_SESSION paragraphs of a session and their themes."""
+    cands = candidates(turns)
+    judged = [c for c in cands if key_of(c["p"]) in JUDGMENTS]
+    if judged:
+        # An LLM read these candidates (judge.py): keep the best ones, filed under
+        # the themes it found them to be about.
+        for c in judged:
+            j = JUDGMENTS[key_of(c["p"])]
+            c["q"], c["themes"] = j["q"], [t for t in j["themes"] if t in KW_IDS]
+        keep = sorted((c for c in judged if c["q"] >= MIN_QUALITY and c["themes"]),
+                      key=lambda c: (-c["q"], -max(c["kws"].values())))
+        chosen = [(c, c["themes"]) for c in keep[:MAX_PER_SESSION]]
+    else:
+        # No verdicts yet: the best paragraph per keyword, by word count.
+        pairs = sorted(((s, kw, c) for c in cands for kw, s in c["kws"].items()), key=lambda x: -x[0])
+        used_kw, picked = set(), {}
+        for _, kw, c in pairs:
+            if kw in used_kw or (id(c) not in picked and len(picked) >= MAX_PER_SESSION):
+                continue
+            used_kw.add(kw)
+            picked.setdefault(id(c), (c, []))[1].append(kw)
+        chosen = list(picked.values())
+    out = []
+    slug = path.replace("/channeling/", "").replace("/", "-")
+    for c, kws in chosen:
+        p, anchor, i = c["p"], c["a"], c["i"]
+        e = {"id": f"{slug}-{anchor.strip('!')}-{key_of(p)[:6]}", "kws": [], "s": path, "a": anchor,
+             "t": trim(p), "by": c["by"], **question_for(i, turns, synopsis)}
+        # numbered Q&A (Ra Contact): link to "13.2" instead of the speaker turn
+        num = NUMS.get(anchor) or (i and NUMS.get(turns[i - 1][1]))
+        if num:
+            e.update(n=num, a=num.split(".")[-1])
+        for kw in kws:
+            e["kws"].append(kw)
+            # subcategories ("densities/third") are judged on the whole paragraph
+            e["kws"] += [f"{kw}/{s['id']}" for s in SUBS.get(kw, []) if re.search(s["pattern"], p, re.I)]
+        out.append(e)
+    return out
 
 
 def main(years):

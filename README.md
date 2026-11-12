@@ -4,6 +4,8 @@ An unofficial keyword index of short excerpts from the Ra, Q’uo, Latwii, Haton
 published by [L/L Research](https://www.llresearch.org). Every excerpt links to the
 exact place in the full session on llresearch.org.
 
+Live at <https://ll.dtun.nl> (with the helper) and <https://meneerkrabs.github.io/quo-index/>.
+
 ## Credits and copyright
 
 All channeled material quoted here is **© L/L Research (Louisville, KY)**, all rights
@@ -33,6 +35,16 @@ If L/L Research would like anything changed or removed, please open an issue.
 Excerpts are chosen by word match. A keyword must occur at least twice in a paragraph
 (once for specific terms, three times for very broad ones such as "love"); see `min` in
 `keywords.json`. `python3 build.py cache` rebuilds everything from the local cache.
+
+- `judge.py` lets an LLM read the candidate paragraphs (never whole transcripts) and say
+  which themes each is about and how well it stands alone; `judgments.json` holds the verdicts.
+- "The noble helper" is an LLM guide that explains the excerpts on screen. It is not Ra or
+  any channeled source, claims no truth, cites the excerpts it used and tells the reader to
+  read the full session. `serve.py` runs it locally (through the `opencode` CLI);
+  `server/helper.mjs` is the public backend behind https://ll.dtun.nl/api/guide (free
+  OpenAI-compatible APIs, rate limited). On GitHub Pages there is no backend, so the helper
+  stays hidden there. L/L Research's policy asks for written permission for tools that
+  retrieve their content; this helper only reads excerpts that are already on the site.
 
 ```bash
 python3 build.py 1986

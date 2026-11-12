@@ -1,0 +1,29 @@
+[Unit]
+Description=Confederation sources by keyword - the noble helper (chat backend)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/node /opt/ll-helper/helper.mjs
+# Provider keys are shared with the astroloog service; own settings use HELPER_ names.
+EnvironmentFile=/etc/astroloog.env
+Environment=HELPER_PORT=8791
+Environment=HELPER_ORIGIN=https://ll.dtun.nl
+Environment=HELPER_DATA=/var/www/html/ll/data.json
+DynamicUser=yes
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
