@@ -40,8 +40,10 @@ under up to three themes, taken from an LLM's reading of the session (`judge.py`
 it has no verdict, from the patterns in `keywords.json`. Each theme carries a strength: the
 judge's verdict averaged over the piece's paragraphs, plus how densely the keyword's own
 patterns appear, so a long passage that mentions a theme in passing does not outrank a short
-one that is entirely about it. Theme pages and search open strongest first (search: most
-matches first), and the order menu switches to oldest or newest first.
+one that is entirely about it. A piece that opens with its question counts a little higher,
+since it makes sense on its own, and a question that is itself about the theme lifts the
+piece that answers it by up to half again. Theme pages and search open strongest first
+(search: most matches first), and the order menu switches to oldest or newest first.
 `python3 build.py cache` rebuilds everything from the private local page cache without
 touching llresearch.org.
 

@@ -38,6 +38,9 @@ DELAY = 1.5            # seconds between requests
 MAX_PIECE = 3000       # a piece of one speaker turn is at most this many characters
 MAX_THEMES = 3         # themes filed per piece, most relevant first
 MAX_ATTACHED_Q = 1500  # the question shown above a piece (it is also in the session itself)
+Q_BONUS = 0.5          # a piece that opens with its question reads well on its own
+Q_SHARE = 0.2          # how much a question about the theme lifts the answer, per unit of density
+Q_TOP = 0.5            # the most that lift can be: half again, never more
 MIN_CHARS = 200        # candidates() below only offers paragraphs at least this long
 MAX_CANDIDATES = 8     # paragraphs per session offered to the LLM judge
 MAX_QUALITY = 5        # a judge verdict is 1-5
@@ -47,6 +50,7 @@ MAX_CHARS = 1500       # trim() default; judge.py sends shortened candidates
 KEYWORDS = json.loads((Path(__file__).parent / "keywords.json").read_text())
 SUBS = {k["id"]: k["subs"] for k in KEYWORDS if k.get("subs")}
 KW_IDS = {k["id"] for k in KEYWORDS}
+PATTERNS = {k["id"]: k["pattern"] for k in KEYWORDS}
 JUDGE = Path(__file__).parent / "judgments.json"      # verdicts written by judge.py
 JUDGMENTS = json.loads(JUDGE.read_text()) if JUDGE.exists() else {}
 SITE = Path(__file__).parent / "site"
@@ -231,11 +235,20 @@ def density(pattern, text):
     return 3 * len(re.findall(pattern, text, re.I)) / (len(text) / 500 + 1)
 
 
-def themes_of(text, paras):
+def q_lift(pattern, question):
+    """How much a question that is itself about a theme lifts the answer: up to Q_TOP."""
+    if not question:
+        return 1.0
+    return 1 + min(Q_SHARE * density(pattern, question), Q_TOP)
+
+
+def themes_of(text, paras, question=""):
     """The themes a piece is filed under, with how strongly: what an LLM judge saw in it,
     topped up with the keyword patterns. The score says how much of the piece is about the
     theme, not how long the piece is, so a long passage that passes a theme in one
-    paragraph does not outrank a short one that is entirely about it."""
+    paragraph does not outrank a short one that is entirely about it. A piece that opens
+    with its question gets a little extra (it makes sense on its own), and a question that
+    is itself about the theme says the piece answers it, so that counts for the piece."""
     score = {}
     for p in paras:
         j = JUDGMENTS.get(key_of(p))
@@ -248,6 +261,9 @@ def themes_of(text, paras):
     for kw in KEYWORDS:
         if len(re.findall(kw["pattern"], text, re.I)) >= kw.get("min", 2):
             score[kw["id"]] = score.get(kw["id"], 0) + density(kw["pattern"], text)
+    if question:
+        # the question is what the piece answers, so it lifts the pieces for its theme
+        score = {t: s * q_lift(PATTERNS[t], question) + Q_BONUS for t, s in score.items()}
     best = sorted(score, key=lambda k: (-score[k], k))[:MAX_THEMES]
     kws = []
     for kw in best:
@@ -255,7 +271,8 @@ def themes_of(text, paras):
         for s in SUBS.get(kw, []):
             # a subcategory is sorted on its own presence, plus the theme's strength
             if re.search(s["pattern"], text, re.I):
-                kws.append((f"{kw}/{s['id']}", score[kw] + density(s["pattern"], text)))
+                extra = density(s["pattern"], text) * q_lift(s["pattern"], question)
+                kws.append((f"{kw}/{s['id']}", score[kw] + extra))
     return kws
 
 
@@ -268,8 +285,12 @@ def excerpts_for(path, turns, synopsis=""):
             continue
         src = source(speaker)
         num = NUMS.get(anchor) or (i and NUMS.get(turns[i - 1][1]))
+        q = question_for(i, turns, synopsis)
+        if not q or len(q["q"]) > MAX_ATTACHED_Q:
+            q = {}
         for k, (text, plist) in enumerate(grouped(paras), 1):
-            themed = themes_of(text, plist) if src else []
+            # only the opening piece of a turn carries the question, so only it gets its weight
+            themed = themes_of(text, plist, q.get("q", "") if k == 1 else "") if src else []
             e = {"id": f"{slug}-{anchor.strip('!')}-{k}", "kws": [t for t, _ in themed],
                  "s": path, "a": anchor, "t": text, "by": src or speaker}
             if themed:
@@ -277,10 +298,8 @@ def excerpts_for(path, turns, synopsis=""):
                 e["w"] = {t: round(s, 1) for t, s in themed}
             if src:
                 e["r"] = 1
-                if k == 1:
-                    q = question_for(i, turns, synopsis)
-                    if q and len(q["q"]) <= MAX_ATTACHED_Q:
-                        e.update(q)
+                if k == 1 and q:
+                    e.update(q)
             # numbered Q&A (Ra Contact): link to "13.2" instead of the speaker turn
             if num:
                 e.update(n=num, a=num.split(".")[-1])
