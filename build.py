@@ -38,7 +38,7 @@ DELAY = 1.5            # seconds between requests
 MAX_PIECE = 3000       # a piece of one speaker turn is at most this many characters
 MAX_THEMES = 3         # themes filed per piece, most relevant first
 MAX_ATTACHED_Q = 1500  # the question shown above a piece (it is also in the session itself)
-Q_BONUS = 0.5          # a piece that opens with its question reads well on its own
+Q_NONE = 0.6           # a piece without its question ranks below one that has it
 Q_SHARE = 0.2          # how much a question about the theme lifts the answer, per unit of density
 Q_TOP = 0.5            # the most that lift can be: half again, never more
 MIN_CHARS = 200        # candidates() below only offers paragraphs at least this long
@@ -247,23 +247,23 @@ def themes_of(text, paras, question=""):
     topped up with the keyword patterns. The score says how much of the piece is about the
     theme, not how long the piece is, so a long passage that passes a theme in one
     paragraph does not outrank a short one that is entirely about it. A piece that opens
-    with its question gets a little extra (it makes sense on its own), and a question that
-    is itself about the theme says the piece answers it, so that counts for the piece."""
-    score = {}
+    with its question ranks above one that does not (it makes sense on its own), and a
+    question that is itself about the theme says the piece answers it, so it counts too."""
+    base = {}
     for p in paras:
         j = JUDGMENTS.get(key_of(p))
         if j and j.get("q", 0) >= MIN_QUALITY:
             for t in j.get("themes", []):
                 if t in KW_IDS:
-                    score[t] = score.get(t, 0) + 2 * j["q"]
-    for t in score:
-        score[t] /= max(1, len(paras))      # the judge's verdict, averaged over the piece
+                    base[t] = base.get(t, 0) + 2 * j["q"]
+    for t in base:
+        base[t] /= max(1, len(paras))       # the judge's verdict, averaged over the piece
     for kw in KEYWORDS:
         if len(re.findall(kw["pattern"], text, re.I)) >= kw.get("min", 2):
-            score[kw["id"]] = score.get(kw["id"], 0) + density(kw["pattern"], text)
-    if question:
-        # the question is what the piece answers, so it lifts the pieces for its theme
-        score = {t: s * q_lift(PATTERNS[t], question) + Q_BONUS for t, s in score.items()}
+            base[kw["id"]] = base.get(kw["id"], 0) + density(kw["pattern"], text)
+    # the question is what the piece answers, so it decides how high the piece ranks
+    score = {t: s * (q_lift(PATTERNS[t], question) if question else Q_NONE)
+             for t, s in base.items()}
     best = sorted(score, key=lambda k: (-score[k], k))[:MAX_THEMES]
     kws = []
     for kw in best:
@@ -271,8 +271,8 @@ def themes_of(text, paras, question=""):
         for s in SUBS.get(kw, []):
             # a subcategory is sorted on its own presence, plus the theme's strength
             if re.search(s["pattern"], text, re.I):
-                extra = density(s["pattern"], text) * q_lift(s["pattern"], question)
-                kws.append((f"{kw}/{s['id']}", score[kw] + extra))
+                lift = q_lift(s["pattern"], question) if question else Q_NONE
+                kws.append((f"{kw}/{s['id']}", (base[kw] + density(s["pattern"], text)) * lift))
     return kws
 
 
