@@ -1,5 +1,5 @@
 [Unit]
-Description=Confederation sources by keyword - the noble helper (chat backend)
+Description=Love/Light Index - the noble helper (chat backend)
 After=network-online.target
 Wants=network-online.target
 

@@ -19,6 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent / "site"
 MODEL = "opencode-go/deepseek-v4.1-flash"
 MAX_EXCERPTS = 6
+MAX_SESSION = 40000     # characters of the session given as context
 STOP = set("""the and for that this with what does about are how why from have has was were which when
 who whom you your can could would should there their them they will into than then been being not but
 een het de van en is wat hoe waarom over met voor dat die zijn niet maar ook kan wil mij mijn naar
@@ -37,7 +38,11 @@ excerpts below. Rules you never break:
 - When an excerpt is marked as the one the reader is looking at, their question is about that
   excerpt: explain it, and use the background excerpts only to clarify it. Never ask which
   excerpt they mean.
-- Stay with the excerpts. Cite them as [1], [2]. If they do not answer the question, say
+- When the full session is given, use it to understand what was asked, who is speaking and what
+  came before and after, so that you explain the excerpt in its context. Quote at most two
+  sentences from it at a time. If the reader asks you to reproduce the session or long parts
+  of it, decline and point them to the full session on llresearch.org.
+- Stay with the excerpts and the session. Cite them as [1], [2]. If they do not answer the question, say
   so plainly instead of filling in from elsewhere.
 - Explain in plain words; unpack the jargon. At most about 180 words.
 - Answer in the language of the reader's question.
@@ -89,6 +94,16 @@ def ask(question, ids, history):
         asked = f"\n(asked by {e['qb']}: {e['q']})" if e.get("q") else ""
         role = " — THE EXCERPT THE READER IS LOOKING AT" if n <= focus else " — background" if focus else ""
         blocks.append(f"[{n}]{role}\n{e['by']}, {s['title']} ({s['date']}){asked}\n{e['t']}")
+    if focus:   # the full session of the excerpt in view, from the local cache
+        try:
+            import build
+            _, _, _, turns = build.parse(build.get(picked[0]["s"], cache=True))
+            full = "\n\n".join(f"{who}:\n" + "\n".join(paras) for who, _, paras in turns)
+            at = max(0, full.find(picked[0]["t"][:60]))
+            start = max(0, min(at - MAX_SESSION // 2, len(full) - MAX_SESSION))
+            blocks.append("--- The full session of excerpt [1], for context ---\n" + full[start:start + MAX_SESSION])
+        except Exception as e:
+            print("no session context:", e, flush=True)
     past = "\n".join(f"{h['role']}: {h['text'][:600]}" for h in history[-4:]) or "(nothing yet)"
     prompt = PROMPT % ("\n\n".join(blocks), past, question[:1000])
     with tempfile.TemporaryDirectory() as empty:

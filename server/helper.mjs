@@ -3,8 +3,8 @@
 //   GET  /api/guide  -> {ok: true}
 //   POST /api/guide  {question, ids, history} -> {answer, sources}
 //
-// It only ever gives the model excerpts that are already on the site, never whole
-// transcripts. Modelled on the "astroloog" service of forecast.dtun.nl and reads the
+// The model gets excerpts that are on the site and, for the excerpt the reader is looking
+// at, its full session as context (read from llresearch.org, kept in memory only). Modelled on the "astroloog" service of forecast.dtun.nl and reads the
 // same provider keys (OpenAI-compatible APIs, free tiers first):
 //   GROQ_API_KEY, GROQ_MODELS                       Groq, tried first
 //   LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_FALLBACK_MODELS, LLM_EXTRA   Z.ai
@@ -22,6 +22,8 @@ const PER_MIN = Number(env.HELPER_PER_MIN || 10);
 const PER_DAY = Number(env.HELPER_PER_DAY || 300);
 const CLIENT_PER_HOUR = Number(env.HELPER_CLIENT_PER_HOUR || 20);
 const MAX_EXCERPTS = 6;
+const SOURCE = 'https://www.llresearch.org';
+const MAX_SESSION_CHARS = Number(env.HELPER_SESSION_CHARS || 40000);
 
 const list = (v) => String(v || '').split(',').map((m) => m.trim()).filter(Boolean);
 const PROVIDERS = [];
@@ -46,7 +48,11 @@ excerpts you are given. Rules you never break:
 - When an excerpt is marked as the one the reader is looking at, their question is about that
   excerpt: explain it, and use the background excerpts only to clarify it. Never ask which
   excerpt they mean.
-- Stay with the excerpts. Cite them as [1], [2]. If they do not answer the question, say
+- When the full session is given, use it to understand what was asked, who is speaking and what
+  came before and after, so that you explain the excerpt in its context. Quote at most two
+  sentences from it at a time. If the reader asks you to reproduce the session or long parts
+  of it, decline and point them to the full session on llresearch.org.
+- Stay with the excerpts and the session. Cite them as [1], [2]. If they do not answer the question, say
   so plainly instead of filling in from elsewhere.
 - Explain in plain words; unpack the jargon. At most about 180 words. Plain text, no markdown.
 - Answer in the language of the reader's question.
@@ -90,6 +96,40 @@ function find(question, ids) {
     picked.push(...ranked.slice(0, MAX_EXCERPTS - picked.length).map(([, e]) => e));
   }
   return { picked, focus: focus.length };
+}
+
+// The full session of the excerpt the reader is looking at, as context for the model. It is
+// read from llresearch.org when asked for and kept in memory for a few hours only; nothing
+// is stored on disk and the reader never gets it, only the helper's explanation.
+const sessions = new Map();
+const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”', mdash: '—', ndash: '–', hellip: '…' };
+const plain = (s) => s.replace(/<sup\b[\s\S]*?<\/sup>/g, '').replace(/<[^>]+>/g, '')
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n)).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+  .replace(/&(\w+);/g, (m0, n) => entities[n] ?? m0).replace(/[ \t]+/g, ' ');
+async function sessionText(path) {
+  if (!/^\/channeling\/[\w-]+\/[\w-]+$/.test(path)) return '';
+  const hit = sessions.get(path);
+  if (hit && Date.now() - hit.at < 6 * 3_600_000) return hit.text;
+  try {
+    const r = await fetch(SOURCE + path, { signal: AbortSignal.timeout(15_000),
+      headers: { 'user-agent': 'quo-index helper (ll.dtun.nl; one page per question, cached)' } });
+    if (!r.ok) return '';
+    const article = (await r.text()).match(/<article id="fountain">([\s\S]*?)<\/article>/);
+    if (!article) return '';
+    const text = plain(article[1].replace(/<h4 class="speaker"[\s\S]*?<span class="name"[^>]*>([\s\S]*?)<\/span><\/h4>/g, '\n\n$1:\n')
+      .replace(/<\/p>/g, '\n')).replace(/\n{3,}/g, '\n\n').trim();
+    if (sessions.size >= 40) sessions.delete(sessions.keys().next().value);
+    sessions.set(path, { at: Date.now(), text });
+    return text;
+  } catch (e) { console.error('session unreachable', path, e.name); return ''; }
+}
+// Long sessions are cut to a window around the excerpt.
+function windowAround(text, excerpt) {
+  if (text.length <= MAX_SESSION_CHARS) return text;
+  const at = Math.max(0, text.indexOf(excerpt.replace(/ \[…\]$/, '').slice(0, 60)));
+  const start = Math.max(0, Math.min(at - MAX_SESSION_CHARS / 2, text.length - MAX_SESSION_CHARS));
+  return (start > 0 ? '[…earlier part left out…]\n' : '') + text.slice(start, start + MAX_SESSION_CHARS)
+    + (start + MAX_SESSION_CHARS < text.length ? '\n[…later part left out…]' : '');
 }
 
 // limits live here because sslh hides client addresses from nginx
@@ -155,7 +195,12 @@ async function ask(req, res) {
     const role = n < focus ? ' — THE EXCERPT THE READER IS LOOKING AT' : focus ? ' — background' : '';
     return `[${n + 1}]${role}\n${e.by}, ${s.title} (${s.date})${e.q ? `\n(asked by ${e.qb}: ${e.q})` : ''}\n${e.t}`;
   }).join('\n\n');
-  const answer = await complete([{ role: 'system', content: `${SYSTEM}\n\n--- Excerpts ---\n${blocks}\n--- End of excerpts ---` },
+  let session = '';
+  if (focus) {
+    const full = await sessionText(picked[0].s);
+    if (full) session = `\n\n--- The full session of excerpt [1], for context ---\n${windowAround(full, picked[0].t)}\n--- End of session ---`;
+  }
+  const answer = await complete([{ role: 'system', content: `${SYSTEM}\n\n--- Excerpts ---\n${blocks}\n--- End of excerpts ---${session}` },
     ...history, { role: 'user', content: question }]);
   if (!answer) return reply(res, 502, { error: 'the helper could not be reached' });
   reply(res, 200, { answer, sources: picked.map((e) => e.id) });

@@ -1,4 +1,4 @@
-# Confederation sources by keyword
+# Love/Light Index
 
 An unofficial keyword index of short excerpts from the Ra, Q’uo, Latwii, Hatonn and other Confederation channelings
 published by [L/L Research](https://www.llresearch.org). Every excerpt links to the
@@ -45,7 +45,9 @@ themes each is really about and how well it stands alone; the best four are kept
   `server/helper.mjs` is the public backend behind https://ll.dtun.nl/api/guide (free
   OpenAI-compatible APIs, rate limited). On GitHub Pages there is no backend, so the helper
   stays hidden there. L/L Research's policy asks for written permission for tools that
-  retrieve their content; this helper only reads excerpts that are already on the site.
+  retrieve their content. The helper reads the excerpts on the site and, for the excerpt the
+  reader is looking at, its full session as context: fetched from llresearch.org per question,
+  kept in memory only, never shown to the reader, and it refuses to reproduce it.
 
 ```bash
 python3 build.py 1986
