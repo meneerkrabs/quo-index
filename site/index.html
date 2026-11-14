@@ -138,13 +138,24 @@ const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','
 const main = $('main'), q = $('q'), src = $('src'), y1 = $('y1'), y2 = $('y2'), ord = $('ord');
 let IDX = null, all = null, shown = 100, labels = {};   // all: every piece, loaded on demand
 
+const BASE_TITLE = document.title;
+const BASE_DESC = document.querySelector('meta[name=description]').content;
+// the tab, the bookmark and the back button all say where you are
+function setDoc(title, desc) {
+  document.title = title;
+  document.querySelector('meta[name=description]').content = desc || BASE_DESC;
+}
+
 const slug = s => s.replace('/channeling/', '').replace(/\//g, '-');
 const ses = g => IDX.sessions[g.s];
 const year = g => (ses(g) ? ses(g).date : '').slice(0, 4);
 // how strongly a piece belongs to a theme (build.py), 0 for pieces without a score
 const strength = (g, key) => (g.w && g.w[key]) || 0;
 const ORDER = {strong: 'strongest', old: 'oldest', new: 'newest'};
-const fmt = d => new Date(d + 'T12:00').toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+// two early sessions are known by month only (/channeling/1972/0300): no day to print
+const fmt = d => new Date((d.endsWith('-00') ? d.slice(0, 8) + '01' : d) + 'T12:00')
+  .toLocaleDateString('en-US', d.endsWith('-00')
+    ? {year: 'numeric', month: 'long'} : {year: 'numeric', month: 'long', day: 'numeric'});
 const sessionName = s => s.kind ? s.title + ' · ' + s.kind : s.title + ', ' + fmt(s.date);
 
 // What each source says about itself, in its own words. Every quote links to its session.
@@ -214,8 +225,46 @@ function aboutPage() {
     the vocal channel Carla Rueckert; the sessions since come through other instruments in the same circle.</p>
     ${SOURCES.map(entry).join('')}`;
 }
-const mark = (t, term) => !term ? esc(t) : esc(t).replace(
-  new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), m => `<mark>${m}</mark>`);
+// search words: everything the person typed, minus the little words that carry no meaning
+const STOP = new Set('a an the and or of in to is it that this for with on as at by be'.split(' '));
+const escRx = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const ENDINGS = ['fulness', 'fully', 'ing', 'ness', 'ful', 'ly', 'ed', 'es', 's'];
+// these endings may follow the stem, so "grate" also finds grateful and "lov" finds love,
+// loved and loving; longer words are cut to their stem first, short ones are taken as they are
+const TAIL = '(?:e|es|s|ed|ing|ly|ness|ful|fully|fulness)?';
+function stem(w) {
+  if (w.length > 4) {
+    for (const s of ENDINGS) if (w.endsWith(s) && w.length - s.length >= 3) return w.slice(0, -s.length);
+  }
+  return w;
+}
+function searchWords(term) {
+  const ws = term.toLowerCase().match(/[a-z0-9'’]+/g) || [];
+  const keep = ws.filter(w => !STOP.has(w));
+  return keep.length ? keep : (ws.length ? ws : [term.toLowerCase()]);
+}
+// words that mean the same here but do not share a stem: a search for gratitude should
+// not miss the passages that say grateful
+const ALIKE = {
+  gratitude: ['grateful', 'thankful', 'thanksgiving'],
+  grateful: ['gratitude', 'thankful', 'thanksgiving'],
+  thankful: ['gratitude', 'grateful', 'thanksgiving'],
+  thanksgiving: ['gratitude', 'grateful', 'thankful']
+};
+// only the word that was typed is cut to its stem: cutting thankful to thank would bring
+// in every "thank you"
+const wordRx = w => '\\b(?:' + escRx(stem(w)) + TAIL
+  + (ALIKE[w] || []).map(x => '|' + escRx(x) + TAIL).join('') + ')\\b';
+const searchRx = term => searchWords(term).map(w => new RegExp(wordRx(w), 'gi'));
+let markTerm = null, markRx = null;
+const mark = (t, term) => {
+  if (!term) return esc(t);
+  if (term !== markTerm) {
+    markTerm = term;
+    markRx = new RegExp(searchWords(term).map(wordRx).join('|'), 'gi');
+  }
+  return esc(t).replace(markRx, m => `<mark>${m}</mark>`);
+};
 const paras = (t, term, cls) => t.split('\n\n').map(p => `<p${cls ? ` class="${cls}"` : ''}>${mark(p, term)}</p>`).join('');
 
 function prepare() {
@@ -252,8 +301,15 @@ function filtered() {
 function card(g, term) {
   const s = ses(g);
   const tags = g.kws.map(k => `<a href="#/k/${k}">${esc(labels[k] || k)}</a>`).join('');
-  const qn = g.q ? `<p class="q"><b>${esc(g.qb)}:</b> ${mark(g.q, term)}</p>`
-    : (g.r ? `<p class="q none">No question recorded: the source spoke unprompted.</p>` : '');
+  // the question a piece answers: shown in full, however long (a very long one folded away);
+  // a piece that continues an answer links back to the part that carries the question
+  const qn = g.q
+    ? (g.q.length > 700
+        ? `<details class="q"><summary>The question, from ${esc(g.qb)} (${g.q.length} characters)</summary><p>${mark(g.q, term)}</p></details>`
+        : `<p class="q"><b>${esc(g.qb)}:</b> ${mark(g.q, term)}</p>`)
+    : (g.qs
+        ? `<p class="q none">Continues an answer: <a href="#/e/${g.qs}">the question is with its first part</a>.</p>`
+        : (g.r ? `<p class="q none">No question recorded: the source spoke unprompted.</p>` : ''));
   return `<article data-id="${g.id}">${qn}<p class="who"><b>${esc(g.by)}${g.n ? ' ' + g.n : ''}</b></p>${paras(g.t, term)}
     <p class="src">©${s.date.slice(0, 4)} by L/L Research (Louisville, KY) · <a href="${BASE}${g.s}#${g.a}">this piece on llresearch.org</a> ·
     <a href="#/s/${slug(g.s)}">this session</a> · <a href="#/e/${g.id}">permalink</a><span class="ask"> ·
@@ -282,15 +338,21 @@ function render() {
   }
   const groups = all ? filtered() : [];
   const back = `<a class="back" href="#/">← All keywords</a>`;
-  let m, out = '', tab = 'k';
+  let m, out = '', tab = 'k', ttl = BASE_TITLE, dsc = BASE_DESC;
   if (term.length > 1) {
-    let hits = groups.filter(g => (g.t + ' ' + (g.q || '')).toLowerCase().includes(term.toLowerCase()));
-    // strongest first means the pieces that use the word most; equal counts keep their order
+    // every word must be there, in any order, and a word finds its own forms:
+    // "grateful" also finds gratefully, "lead" also leads and leading
+    const rxs = searchRx(term);
+    const hay = g => g.t + ' ' + (g.q || '');
+    let hits = groups.filter(g => { const t = hay(g); return rxs.every(r => (r.lastIndex = 0, r.test(t))); });
+    // strongest first means the pieces that use the words most; equal counts keep their order
     if (ord.value === 'strong') {
-      const low = term.toLowerCase(), count = g => (g.t + ' ' + (g.q || '')).toLowerCase().split(low).length - 1;
+      const count = g => { const t = hay(g); return rxs.reduce((n, r) => n + (t.match(r) || []).length, 0); };
       hits = hits.map(g => [count(g), g]).sort((a, b) => b[0] - a[0]).map(h => h[1]);
     }
     const how = ord.value === 'strong' ? ', most matches first' : '';
+    ttl = `“${term}” · Love/Light Index`;
+    dsc = `${hits.length} pieces of the L/L Research channelings that mention “${term}”, whole and in context.`;
     out = `<h2>“${esc(term)}”</h2><p class="count">${hits.length} pieces${how}</p>` + page(hits, term);
   } else if ((m = h.match(/^#\/k\/([\w-]+)(?:\/([\w-]+))?/)) && labels[m[1]]) {
     const kw = IDX.keywords.find(k => k.id === m[1]), key = m[2] && labels[m[1] + '/' + m[2]] ? m[1] + '/' + m[2] : m[1];
@@ -302,9 +364,13 @@ function render() {
         return `<a href="#/k/${id}" class="${key === id ? 'on' : ''}">${esc(s.label)} (${inKw.filter(g => g.kws.includes(id)).length})</a>`; }).join('') + '</div>' : '';
     const by = {}; hits.forEach(g => by[g.by] = (by[g.by] || 0) + 1);
     const spread = Object.keys(by).length > 1 ? ' · ' + Object.keys(by).sort((a, b) => by[b] - by[a]).map(k => `${esc(k)} ${by[k]}`).join(', ') : '';
+    ttl = `${labels[key]} · Love/Light Index`;
+    dsc = `${hits.length} pieces of the L/L Research channelings on ${labels[key].toLowerCase()}, `
+      + `whole and with the question that was asked.`;
     out = `<h2>${esc(labels[key])}</h2><p class="count">${hits.length} pieces, ${ORDER[ord.value] || 'oldest'} first${spread}</p>${chips}` + page(hits) + back;
   } else if ((m = h.match(/^#\/e\/(.+)/))) {
     const g = all.find(g => g.id === decodeURIComponent(m[1]));
+    if (g) ttl = `${g.by}, ${ses(g) ? ses(g).date.slice(0, 4) : ''} · Love/Light Index`;
     out = g ? `<h2>Piece</h2><p class="count">Permanent link to this piece</p>` + card(g)
             : `<h2>Piece not found</h2><p class="count">This piece is no longer part of the index.</p>`;
     out += back;
@@ -318,6 +384,8 @@ function render() {
     const path = Object.keys(IDX.sessions).find(p => slug(p) === m[1]), s = IDX.sessions[path];
     if (!s) out = `<h2>Session not found</h2>`;
     else {
+      ttl = `${sessionName(s)} · Love/Light Index`;
+      dsc = `The whole session of ${fmt(s.date)}: ${s.by.join(', ')}, ${s.n} pieces, complete and in the order it was given.`;
       const pieces = all.filter(g => g.s === path), turns = [];
       for (const g of pieces) {
         const last = turns[turns.length - 1];
@@ -335,9 +403,15 @@ function render() {
     }
   } else if (sourcesView) {
     tab = 'a';
+    ttl = 'Who speaks · Love/Light Index';
+    dsc = 'Ra, Q’uo, Hatonn, Latwii and the other sources of the L/L Research channelings, '
+      + 'each in its own words, with the session each sentence comes from.';
     out = aboutPage();
   } else if (h.startsWith('#/sessions')) {
     tab = 's';
+    ttl = 'Sessions · Love/Light Index';
+    dsc = `${Object.keys(IDX.sessions).length} complete L/L Research channeling sessions, from `
+      + `${IDX.years[0]} to ${IDX.years[IDX.years.length - 1]}.`;
     const byYear = {};
     Object.keys(IDX.sessions).forEach(p => (byYear[IDX.sessions[p].date.slice(0, 4)] ||= []).push(p));
     out = `<h2>Sessions</h2><p class="count">${Object.keys(IDX.sessions).length} sessions, all of them complete</p>` +
@@ -355,13 +429,23 @@ function render() {
       `</ul><p class="count"><a href="#/sources">Who are these sources? →</a></p>`;
   }
   main.innerHTML = out;
+  setDoc(ttl, dsc);
   for (const t of ['k', 's', 'a', 'r']) $('n-' + t).className = t === tab && !term ? 'on' : '';
 }
 
-fetch('index.json').then(r => r.json()).then(d => { IDX = d; prepare(); render(); });
+fetch('index.json').then(r => r.json()).then(d => {
+  IDX = d; prepare(); render();
+  // fetch the text while the reader is still on the keyword list, so that the first
+  // theme opens at once; it is asked for only after the list itself is on screen
+  const warm = () => { if (!all) loadCorpus().catch(() => {}); };
+  (window.requestIdleCallback || (f => setTimeout(f, 1200)))(warm, {timeout: 4000});
+});
 const reset = () => { shown = 100; render(); };
 addEventListener('hashchange', () => { q.value = ''; reset(); scrollTo(0, 0); });
-q.addEventListener('input', reset);
+// wait for a pause in the typing instead of searching on every key stroke
+let qTimer = 0;
+q.addEventListener('input', () => { clearTimeout(qTimer); qTimer = setTimeout(reset, 180); });
+q.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(qTimer); reset(); } });
 [src, y1, y2, ord].forEach(el => el.addEventListener('change', () => {
   if (y1.value > y2.value) (el === y1 ? y2 : y1).value = el.value;
   reset();

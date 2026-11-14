@@ -33,7 +33,14 @@ If L/L Research would like anything changed or removed, please open an issue.
   keep it while a new build is always a new URL.
 - `site/index.html` is the static page: keywords and subcategories, search, filters on
   source and years, sessions, a random piece, a permanent link per piece, and a page on who
-  the sources say they are.
+  the sources say they are. The title and description follow the view, so a tab, a bookmark
+  and a back button say where you are.
+- `static.py` writes the pages a search engine can read: `k/<theme>/` and
+  `k/<theme>/<sub>/` (the strongest 100 pieces each), `s/<session>/` (the whole session) and
+  `sessions/`, plus `sitemap.xml` and `robots.txt`. Every link in them is relative, so they
+  work at the root of ll.dtun.nl and under `/love-light-index/` on GitHub Pages. The
+  interactive page stays one page with hash addresses, so nothing needs rewrites on the
+  server.
 
 A piece is one speaker turn (questioner turns included), and only a turn longer than 3,000
 characters is split, at a paragraph or sentence end, never inside the text. Pieces are filed
@@ -46,8 +53,27 @@ has none, since it makes sense on its own: without a question it counts for 0.6 
 strength, and a question that is itself about the theme lifts the answer by up to half
 again. Theme pages and search open strongest first (search: most matches first), and the
 order menu switches to oldest or newest first.
+
+The question a piece answers is carried whole, however long it is; a question over 700
+characters is shown folded open on request. Only the piece that opens a turn carries the
+question. The rest of that turn says so and links to it, instead of claiming the source
+spoke unprompted, and is ranked as one that does not stand on its own.
+
+Search is on whole words, tolerant of endings (`grateful` finds `gratitude` only through
+its own word, `love` finds `loving`, `loved`): every word of the query has to be present,
+ignoring *the*, *of*, *and* and the like, and the pieces that use the words most often come
+first. Typing waits 180 ms before it searches, and the corpus is fetched as soon as the
+browser is idle, so neither the first click nor the first keystroke waits for it.
+
 `python3 build.py cache` rebuilds everything from the private local page cache without
 touching llresearch.org.
+
+`refresh.sh` runs the whole cycle: reads the current and last year's listings, judges
+whatever is new, rebuilds, writes the static pages, publishes to ll.dtun.nl and pushes to
+GitHub. It stops before publishing if the rebuild loses pieces. It runs weekly from
+`~/Library/LaunchAgents/nl.dtun.quo-index.refresh.plist` (Mondays, 04:07; launchd runs it
+when the Mac wakes if it slept through). It does not notice an already-read page changing
+upstream: delete that page from `.cache/` and it is read again.
 
 - `judge.py` lets an LLM read candidate paragraphs and say which themes each is about and
   how well it stands alone; `judgments.json` holds the verdicts.

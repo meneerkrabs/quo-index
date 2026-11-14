@@ -37,13 +37,13 @@ UA = "quo-index/0.1 (personal study index; github.com/meneerkrabs)"
 DELAY = 1.5            # seconds between requests
 MAX_PIECE = 3000       # a piece of one speaker turn is at most this many characters
 MAX_THEMES = 3         # themes filed per piece, most relevant first
-MAX_ATTACHED_Q = 1500  # the question shown above a piece (it is also in the session itself)
-Q_NONE = 0.6           # a piece without its question ranks below one that has it
+Q_NONE = 0.6           # a piece that does not open with its question ranks below one that does
 Q_SHARE = 0.2          # how much a question about the theme lifts the answer, per unit of density
 Q_TOP = 0.5            # the most that lift can be: half again, never more
 MIN_CHARS = 200        # candidates() below only offers paragraphs at least this long
-MAX_CANDIDATES = 8     # paragraphs per session offered to the LLM judge
+MAX_CANDIDATES = 16    # paragraphs per session offered to the LLM judge
 MAX_QUALITY = 5        # a judge verdict is 1-5
+JUDGE_DECAY = 0.8      # each further theme in a judge verdict counts this much less
 MIN_QUALITY = 3        # verdicts below this do not add a theme
 MAX_CHARS = 1500       # trim() default; judge.py sends shortened candidates
 
@@ -253,9 +253,12 @@ def themes_of(text, paras, question=""):
     for p in paras:
         j = JUDGMENTS.get(key_of(p))
         if j and j.get("q", 0) >= MIN_QUALITY:
-            for t in j.get("themes", []):
+            # the judge lists its themes most relevant first, so the later ones count for
+            # less; otherwise a generous verdict fills the piece's three places on its own
+            # and a keyword the piece is dense in never gets in
+            for n, t in enumerate(j.get("themes", [])):
                 if t in KW_IDS:
-                    base[t] = base.get(t, 0) + 2 * j["q"]
+                    base[t] = base.get(t, 0) + 2 * j["q"] * (JUDGE_DECAY ** n)
     for t in base:
         base[t] /= max(1, len(paras))       # the judge's verdict, averaged over the piece
     for kw in KEYWORDS:
@@ -286,8 +289,7 @@ def excerpts_for(path, turns, synopsis=""):
         src = source(speaker)
         num = NUMS.get(anchor) or (i and NUMS.get(turns[i - 1][1]))
         q = question_for(i, turns, synopsis)
-        if not q or len(q["q"]) > MAX_ATTACHED_Q:
-            q = {}
+        first = ""      # the id of the turn's opening piece, which carries the question
         for k, (text, plist) in enumerate(grouped(paras), 1):
             # only the opening piece of a turn carries the question, so only it gets its weight
             themed = themes_of(text, plist, q.get("q", "") if k == 1 else "") if src else []
@@ -298,8 +300,14 @@ def excerpts_for(path, turns, synopsis=""):
                 e["w"] = {t: round(s, 1) for t, s in themed}
             if src:
                 e["r"] = 1
-                if k == 1 and q:
-                    e.update(q)
+                if k == 1:
+                    first = e["id"]
+                    if q:
+                        e.update(q)      # whole, however long
+                else:
+                    # the rest of the turn answers the same question: point back at it
+                    # rather than claiming the source spoke unprompted
+                    e["qs"] = first
             # numbered Q&A (Ra Contact): link to "13.2" instead of the speaker turn
             if num:
                 e.update(n=num, a=num.split(".")[-1])
