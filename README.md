@@ -1,8 +1,9 @@
 # Love/Light Index
 
-An unofficial index of the Ra, Q’uo, Latwii, Hatonn and other Confederation channelings
-published by [L/L Research](https://www.llresearch.org): the whole text, by theme, with the
-question that was asked and a link to every original page.
+An unofficial index of the Confederation channelings published by
+[L/L Research](https://www.llresearch.org), from Ra, Q’uo, Hatonn, Latwii, Laitos, Oxal,
+L/Leema, Yadda, Yom, Quanta, Monka, Halos, Tovo and Biondha: the whole text, by theme, with
+the question that was asked and a link to every original page.
 
 Live at <https://ll.dtun.nl> (with the helper) and <https://meneerkrabs.github.io/love-light-index/>.
 
